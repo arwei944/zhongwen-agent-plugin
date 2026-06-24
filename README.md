@@ -13,9 +13,9 @@
 ```
 第一层 · MCP 外部检查器（不可绕过）
     ↓
-第二层 · 输出格式锁（破坏格式=无效输出）
+第二层 · 系统提示文本约束（不可控层）
     ↓
-第三层 · 系统提示文本约束（最后防线）
+第三层 · 可选工具自检（可控层）
 ```
 
 ### 第一层：MCP 语言检查服务器
@@ -24,20 +24,19 @@
 - 提供 `check_chinese_purity` 工具，实时分析文本的中文纯度
 - AI 无法控制、无法绕过、无法关闭外部进程
 - 会话级违规计数器在外部进程中维护，AI 无法自行重置
+- **零干扰模式**：不要求 AI 调用工具，自动记录审计日志
 
-### 第二层：输出格式锁
+### 第二层：系统提示文本约束
 
-- Agent 系统提示中强制规定：每次回答末尾必须包含检查结果
-- 格式：`【语言纯度检查：PASS | 纯度：XX% | 违规数：X | 检查次数：X】`
-- 检查 FAIL → 必须重写直到 PASS
-- 跳过检查 = 输出格式不合格 = 无效回答
+- Agent 定义和全局指令文件，opencode 在 API 层强制注入
+- 模型无法阻止这些文件被加载到系统提示中
+- 约束施加在**模型不可控的层面**
 
-### 第三层：强效文本约束
+### 第三层：可选工具自检
 
-- 强制思考前三行格式
-- 句式绑定（禁止英文连接词）
-- 递进惩戒（警告→反省→重建→重置）
-- 代码块边界管理
+- `check_chinese_purity` 工具可供模型自愿调用进行自我检查
+- 不是强制要求，不影响正常输出流程
+- **零干扰**：模型可以选择不使用该工具
 
 ## 文件结构
 
@@ -45,13 +44,70 @@
 zhongwen-agent-plugin/
 ├── README.md                    ← 本文档
 ├── CHANGELOG.md                 ← 版本历史
-├── chinese-rules.md             ← 全局指令文件（第二层防御）
-├── zhongwen-agent.md            ← Agent 定义文件（第三层防御 + 格式锁）
+├── chinese-rules.md             ← 全局指令文件
+├── zhongwen-agent.md            ← Agent 定义文件
 ├── mcp/
-│   └── check_language.mjs       ← MCP 语言检查服务器（第一层防御）
-└── scripts/
-    └── install.ps1              ← 一键安装脚本（Windows PowerShell）
+│   ├── check_language.mjs       ← MCP 语言检查服务器
+│   └── manage.mjs              ← 版本管理工具
+├── scripts/
+│   ├── install.ps1              ← 一键安装脚本
+│   ├── rollback.ps1             ← 一键回滚脚本
+│   └── upgrade.ps1              ← 一键升级脚本
+└── versions/                    ← 本地版本快照目录（自动生成）
 ```
+
+## 版本管理
+
+插件内置版本管理命令，支持回滚、升级、查看状态。
+
+### 命令总览
+
+```powershell
+.\scripts\manage.ps1 status       # 查看当前状态
+.\scripts\manage.ps1 snapshot     # 手动创建快照
+.\scripts\manage.ps1 rollback     # 回滚到上一个版本
+.\scripts\manage.ps1 upgrade      # 从 GitHub 升级到最新版
+.\scripts\manage.ps1 history      # 查看版本历史
+```
+
+### 快捷脚本
+
+也可以直接使用快捷脚本：
+
+```powershell
+.\scripts\rollback.ps1            # 一键回滚（同 manage.ps1 rollback）
+.\scripts\upgrade.ps1             # 一键升级（同 manage.ps1 upgrade）
+```
+
+### 回滚示例
+
+回滚到上一个版本（自动创建当前状态备份）：
+
+```powershell
+.\scripts\rollback.ps1
+```
+
+回滚到指定版本：
+
+```powershell
+.\scripts\manage.ps1 rollback -TargetVersion v2.0.0
+```
+
+### 升级示例
+
+```powershell
+.\scripts\upgrade.ps1
+```
+
+从 GitHub 拉取最新代码并安装。升级前会自动创建当前状态备份。
+
+### 查看历史
+
+```powershell
+.\scripts\manage.ps1 history
+```
+
+查看所有版本快照和变更记录。
 
 ## 安装方法
 
@@ -108,6 +164,15 @@ zhongwen-agent-plugin/
 1. AI 的思考块前三行会是中文锚定格式
 2. AI 的输出末尾会包含 `【语言纯度检查：PASS | ...】`
 3. 如果出现英文违规，AI 会自动重写直到通过检查
+
+### 零干扰模式说明
+
+新版本采用**零干扰模式**——检查系统在后台运行，不改变 AI 的：
+- 思考内容
+- 输出格式
+- 工具调用行为
+
+AI 正常完成工作，检查系统在旁路记录结果。用户可以通过审计日志查看违规记录。
 
 ## 技术细节
 
