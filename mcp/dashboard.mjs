@@ -23,76 +23,21 @@ const PORT = 3000;
 const HOST = '127.0.0.1';
 
 // ============================================================
-// 数据获取（通过子进程调用 MCP 工具）
+// 数据获取（直接导入数据库模块）
 // ============================================================
 
-/**
- * 通过子进程调用 MCP 工具获取数据
- * 
- * @param {string} toolName - 工具名称
- * @param {object} args - 参数
- * @returns {object} 工具返回结果
- */
-async function callMCPTool(toolName, args = {}) {
-  return new Promise((resolve, reject) => {
-    const { spawn } = require('child_process');
-    
-    // 使用 check_language.mjs 作为数据源
-    const mcpScript = join(CONFIG_DIR, 'mcp', 'check_language.mjs');
-    
-    if (!existsSync(mcpScript)) {
-      reject(new Error('MCP 脚本不存在'));
-      return;
+let dbModule = null;
+
+async function loadDatabaseModule() {
+  if (!dbModule) {
+    try {
+      dbModule = await import('./database.mjs');
+      dbModule.initDatabase();
+    } catch (e) {
+      console.error('[dashboard] 加载数据库模块失败:', e.message);
     }
-    
-    const child = spawn('node', [mcpScript], {
-      stdio: ['pipe', 'pipe', 'inherit']
-    });
-    
-    const request = {
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method: 'tools/call',
-      params: {
-        name: toolName,
-        arguments: args
-      }
-    };
-    
-    let responseData = '';
-    
-    child.stdout.on('data', (data) => {
-      responseData += data.toString();
-    });
-    
-    child.stdout.on('end', () => {
-      try {
-        const lines = responseData.trim().split('\n');
-        const lastLine = lines[lines.length - 1];
-        const response = JSON.parse(lastLine);
-        
-        if (response.error) {
-          reject(new Error(response.error.message));
-          return;
-        }
-        
-        const content = response.result?.content?.[0]?.text;
-        if (content) {
-          resolve(JSON.parse(content));
-        } else {
-          reject(new Error('无效的响应格式'));
-        }
-      } catch (e) {
-        reject(new Error(`解析响应失败: ${e.message}`));
-      }
-    });
-    
-    child.on('error', reject);
-    
-    // 发送请求
-    child.stdin.write(JSON.stringify(request) + '\n');
-    child.stdin.end();
-  });
+  }
+  return dbModule;
 }
 
 /**
@@ -102,8 +47,13 @@ async function callMCPTool(toolName, args = {}) {
  * @returns {object} 仪表板数据
  */
 async function getDashboardData(range = '7d') {
+  const module = await loadDatabaseModule();
+  if (!module || !module.getDashboardData) {
+    return getMockDashboardData();
+  }
+  
   try {
-    return await callMCPTool('zhongwen_dashboard', { range });
+    return module.getDashboardData(range);
   } catch (e) {
     console.error('获取仪表板数据失败:', e.message);
     return getMockDashboardData();
@@ -230,11 +180,16 @@ function createDashboardServer() {
 // ============================================================
 
 function startServer() {
+  console.error('[dashboard] 正在启动服务器...');
   const server = createDashboardServer();
   
   server.listen(PORT, HOST, () => {
     console.error(`[dashboard] 服务器已启动: http://${HOST}:${PORT}`);
     console.error(`[dashboard] 按 Ctrl+C 停止服务器`);
+  });
+  
+  server.on('error', (err) => {
+    console.error('[dashboard] 服务器错误:', err.message);
   });
   
   // 优雅关闭
@@ -253,7 +208,17 @@ function startServer() {
 // 命令行入口
 // ============================================================
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const getFilePath = (url) => {
+  if (url.startsWith('file:///')) {
+    return url.slice(7).replace(/^\/([A-Z]:)/, '$1');
+  }
+  return url.slice(7);
+};
+
+const currentFile = getFilePath(import.meta.url);
+const scriptFile = process.argv[1];
+
+if (currentFile === scriptFile || currentFile.replace(/\\/g, '/') === scriptFile.replace(/\\/g, '/')) {
   startServer();
 }
 
