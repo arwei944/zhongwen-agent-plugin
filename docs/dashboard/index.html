@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>zhongwen-agent 仪表盘</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      line-height: 1.6;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    header {
+      text-align: center;
+      padding: 30px 0;
+      border-bottom: 1px solid #30363d;
+      margin-bottom: 30px;
+    }
+    
+    header h1 {
+      font-size: 2em;
+      color: #58a6ff;
+      margin-bottom: 10px;
+    }
+    
+    header p {
+      color: #8b949e;
+      font-size: 0.9em;
+    }
+    
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    
+    .card-title {
+      font-size: 1.1em;
+      color: #58a6ff;
+      font-weight: 600;
+    }
+    
+    .card-badge {
+      background: #238636;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.8em;
+    }
+    
+    .metric-value {
+      font-size: 2.5em;
+      font-weight: bold;
+      color: #58a6ff;
+      margin: 10px 0;
+    }
+    
+    .metric-label {
+      color: #8b949e;
+      font-size: 0.9em;
+    }
+    
+    .metric-change {
+      font-size: 0.85em;
+      margin-top: 5px;
+    }
+    
+    .metric-change.positive {
+      color: #3fb950;
+    }
+    
+    .metric-change.negative {
+      color: #f85149;
+    }
+    
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin-top: 15px;
+    }
+    
+    .heatmap-container {
+      overflow-x: auto;
+      margin-top: 15px;
+    }
+    
+    .heatmap {
+      display: grid;
+      grid-template-columns: 60px repeat(24, 1fr);
+      gap: 3px;
+      min-width: 800px;
+    }
+    
+    .heatmap-cell {
+      aspect-ratio: 1;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7em;
+      color: #8b949e;
+      transition: transform 0.1s;
+    }
+    
+    .heatmap-cell:hover {
+      transform: scale(1.2);
+      z-index: 10;
+    }
+    
+    .heatmap-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75em;
+      color: #8b949e;
+    }
+    
+    .heatmap-day-label {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 8px;
+      font-size: 0.75em;
+      color: #8b949e;
+    }
+    
+    .ranking-list {
+      list-style: none;
+    }
+    
+    .ranking-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #21262d;
+    }
+    
+    .ranking-item:last-child {
+      border-bottom: none;
+    }
+    
+    .ranking-term {
+      color: #c9d1d9;
+    }
+    
+    .ranking-count {
+      background: #30363d;
+      color: #58a6ff;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.85em;
+    }
+    
+    .suggestion-list {
+      list-style: none;
+    }
+    
+    .suggestion-item {
+      padding: 10px 0;
+      border-bottom: 1px solid #21262d;
+      color: #c9d1d9;
+      font-size: 0.9em;
+    }
+    
+    .suggestion-item:last-child {
+      border-bottom: none;
+    }
+    
+    .suggestion-item::before {
+      content: '💡 ';
+      margin-right: 5px;
+    }
+    
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      justify-content: center;
+    }
+    
+    .btn {
+      background: #238636;
+      color: white;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: background 0.2s;
+    }
+    
+    .btn:hover {
+      background: #2ea043;
+    }
+    
+    .btn-secondary {
+      background: #30363d;
+    }
+    
+    .btn-secondary:hover {
+      background: #484f58;
+    }
+    
+    .btn.active {
+      background: #58a6ff;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: pulse 2s infinite;
+    }
+    
+    .status-indicator.online {
+      background: #3fb950;
+    }
+    
+    .status-indicator.offline {
+      background: #f85149;
+      animation: none;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .last-update {
+      text-align: center;
+      color: #8b949e;
+      font-size: 0.85em;
+      margin-top: 20px;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #8b949e;
+    }
+    
+    .empty-state-icon {
+      font-size: 3em;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📊 zhongwen-agent 仪表盘</h1>
+      <p>中文语言纯度监控 · 实时统计 · 智能分析</p>
+    </header>
+    
+    <div class="controls">
+      <button class="btn active" onclick="updateDashboard('7d')">最近 7 天</button>
+      <button class="btn btn-secondary" onclick="updateDashboard('30d')">最近 30 天</button>
+      <button class="btn btn-secondary" onclick="updateDashboard('all')">全部数据</button>
+    </div>
+    
+    <div class="dashboard-grid">
+      <!-- 实时状态卡片 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">当前状态</span>
+          <span class="status-indicator online" id="statusIndicator"></span>
+        </div>
+        <div class="metric-value" id="currentPurity">--</div>
+        <div class="metric-label">中文纯度</div>
+        <div class="metric-change" id="purityChange"></div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">检查统计</span>
+          <span class="card-badge" id="checkBadge">进行中</span>
+        </div>
+        <div class="metric-value" id="totalChecks">0</div>
+        <div class="metric-label">总检查次数</div>
+        <div class="metric-change" id="violationRate"></div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">违规统计</span>
+        </div>
+        <div class="metric-value" id="totalViolations">0</div>
+        <div class="metric-label">总违规次数</div>
+        <div class="metric-change" id="violationDetails"></div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">质量评分</span>
+        </div>
+        <div class="metric-value" id="qualityScore">--</div>
+        <div class="metric-label">综合质量评分</div>
+        <div class="metric-change" id="scoreDetails"></div>
+      </div>
+    </div>
+    
+    <!-- 趋势图表 -->
+    <div class="card" style="margin-bottom: 20px;">
+      <div class="card-header">
+        <span class="card-title">趋势分析</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+    
+    <div class="dashboard-grid">
+      <!-- 违规分布 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">违规类型分布</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="violationChart"></canvas>
+        </div>
+      </div>
+      
+      <!-- 高频违规词 -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">高频违规词 Top 10</span>
+        </div>
+        <ul class="ranking-list" id="topTerms">
+          <li class="empty-state">
+            <div class="empty-state-icon">📝</div>
+            <div>暂无数据</div>
+          </li>
+        </ul>
+      </div>
+    </div>
+    
+    <!-- 热力图 -->
+    <div class="card" style="margin-bottom: 20px;">
+      <div class="card-header">
+        <span class="card-title">违规时间热力图</span>
+        <span style="font-size: 0.85em; color: #8b949e;">颜色越深表示该时段违规越多</span>
+      </div>
+      <div class="heatmap-container">
+        <div class="heatmap" id="heatmap"></div>
+      </div>
+    </div>
+    
+    <!-- 改进建议 -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">智能改进建议</span>
+      </div>
+      <ul class="suggestion-list" id="suggestions">
+        <li class="suggestion-item">暂无数据，开始使用后将自动生成改进建议</li>
+      </ul>
+    </div>
+    
+    <div class="last-update" id="lastUpdate">
+      最后更新: --
+    </div>
+  </div>
+  
+  <script src="app.js"></script>
+</body>
+</html>

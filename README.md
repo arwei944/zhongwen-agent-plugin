@@ -1,6 +1,6 @@
 # zhongwen-agent-plugin
 
-> 中文语言纯度高强度工程约束插件 · 零干扰后台监控 · MCP 自动审计 · 智能体 CLI
+> 中文语言纯度高强度工程约束插件 · 零干扰后台监控 · MCP 自动审计 · 智能体 CLI · 可视化仪表盘 · 智能分析
 
 ## 这是什么
 
@@ -19,11 +19,12 @@
 ### 第一层：MCP 语言检查服务器
 
 - 一个独立于 AI 运行的 Node.js 进程
-- 提供 `check_chinese_purity`、`zhongwen_status`、`zhongwen_rollback`、`zhongwen_upgrade`、`zhongwen_history` 等工具
+- 提供 `check_chinese_purity`、`zhongwen_status`、`zhongwen_rollback`、`zhongwen_upgrade`、`zhongwen_history`、`zhongwen_dashboard`、`zhongwen_open_dashboard` 等工具
 - AI 无法控制、无法绕过、无法关闭外部进程
 - **零干扰模式**：不要求 AI 调用工具，后台自动记录审计日志
 - 检测能力：英文句子、英文填充词、中英混合短语、代码块注释、翻译腔
 - 支持白名单豁免和修复建议
+- **v4.0.0 新增**：SQLite 数据持久化、可视化仪表盘、智能分析
 
 ### 第二层：系统提示身份定义
 
@@ -198,6 +199,8 @@ v3.0.0 采用**零干扰模式**——检查系统在后台运行，不改变 AI
 | `zhongwen_rollback` | 回滚到指定版本 |
 | `zhongwen_upgrade` | 从 GitHub 升级 |
 | `zhongwen_history` | 查看版本历史 |
+| `zhongwen_dashboard` | **v4.0.0 新增**：获取完整仪表板数据 |
+| `zhongwen_open_dashboard` | **v4.0.0 新增**：打开 Web 可视化仪表盘 |
 
 ### 纯度计算
 
@@ -273,6 +276,38 @@ const FIX_SUGGESTIONS = {
   // ...
 };
 ```
+
+## v4.0.0 新功能（2026-06-25）
+
+### 数据层增强
+
+- **SQLite 数据库**：统一存储所有统计数据，支持跨会话持久化
+- **多日志分级**：全量日志、违规日志、汇总日志三级分离
+- **日志轮转**：超过 10MB 自动轮转，超过 30 天自动压缩归档
+- **结构化日志**：每条记录包含 session_id、model、turn、text_hash 等字段
+
+### 可视化仪表盘
+
+- **Web 仪表盘**：基于 Node.js 原生 HTTP 服务器，零外部依赖
+- **实时监控**：自动刷新（每 30 秒），显示当前纯度、违规次数、运行时间
+- **趋势图表**：纯度和违规率趋势线图（最近 7 天/30 天/全部）
+- **违规分布**：饼图显示各类型违规占比
+- **时间热力图**：GitHub 风格 7×24 违规热力图
+- **高频词排名**：Top 10 违规词展示
+- **智能建议**：自动生成改进建议
+
+### 智能化引擎
+
+- **用户行为分析**：识别高频违规模式、最常违规时段
+- **自适应白名单**：根据使用频率自动建议加入白名单
+- **智能告警**：连续 FAIL、违规率过高、纯度骤降自动告警
+- **质量评分**：0-100 分综合评分，考虑纯度、违规率、趋势
+- **根因分析**：自动识别违规根因并生成改进建议
+
+### 新增 MCP 工具
+
+- `zhongwen_dashboard`：获取完整仪表板数据（支持 7d/30d/all 时间范围）
+- `zhongwen_open_dashboard`：一键打开 Web 仪表盘
 
 ## 版本历史
 

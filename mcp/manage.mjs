@@ -25,6 +25,8 @@ const VERSIONS_DIR = join(CONFIG_DIR, 'versions');
 const MANIFEST_PATH = join(VERSIONS_DIR, 'manifest.json');
 const PLUGIN_DIR = 'D:\\work\\opencode\\zhongwen-agent-plugin';
 const LOG_PATH = join(CONFIG_DIR, 'logs', 'manage.log');
+const HOST = '127.0.0.1';
+const PORT = 3000;
 
 const MANAGED_FILES = [
   { source: join(PLUGIN_DIR, 'zhongwen-agent.md'), relPath: 'agents/zhongwen-agent.md' },
@@ -275,6 +277,11 @@ function handleRequest(request) {
             name: 'zhongwen_history',
             description: '查看所有版本快照的历史记录。',
             inputSchema: { type: 'object', properties: {} }
+          },
+          {
+            name: 'zhongwen_open_dashboard',
+            description: '打开 Web 可视化仪表盘。自动启动仪表盘服务器并在浏览器中打开。',
+            inputSchema: { type: 'object', properties: {} }
           }
         ]
       });
@@ -408,6 +415,76 @@ function handleRequest(request) {
               }, null, 2)
             }]
           });
+          break;
+        }
+
+        case 'zhongwen_open_dashboard': {
+          try {
+            const { spawn } = require('child_process');
+            const dashboardScript = join(CONFIG_DIR, 'mcp', 'dashboard.mjs');
+            
+            // 检查是否已经在运行
+            const { existsSync } = require('fs');
+            if (!existsSync(dashboardScript)) {
+              sendResponse(id, {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: false,
+                    error: '仪表盘服务器脚本不存在'
+                  })
+                }]
+              });
+              break;
+            }
+            
+            // 启动仪表盘服务器
+            const child = spawn('node', [dashboardScript], {
+              detached: true,
+              stdio: 'ignore'
+            });
+            
+            child.unref();
+            
+            // 等待服务器启动
+            setTimeout(() => {
+              // 打开浏览器
+              const url = `http://${HOST}:${PORT}`;
+              
+              try {
+                const { exec } = require('child_process');
+                exec(`start ${url}`, (error) => {
+                  if (error) {
+                    console.error('打开浏览器失败:', error);
+                  }
+                });
+              } catch (e) {
+                console.error('打开浏览器失败:', e.message);
+              }
+            }, 1500);
+            
+            sendResponse(id, {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  url: `http://${HOST}:${PORT}`,
+                  pid: child.pid,
+                  message: '仪表盘服务器已启动'
+                }, null, 2)
+              }]
+            });
+          } catch (error) {
+            sendResponse(id, {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  success: false,
+                  error: error.message
+                })
+              }]
+            });
+          }
           break;
         }
 
