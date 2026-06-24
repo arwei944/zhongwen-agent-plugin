@@ -1,0 +1,71 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "stepfun": {
+      "models": {
+        "step-router-v1": {
+          "id": "step-router-v1",
+          "name": "step-router-v1"
+        },
+        "step-3.7-flash": {
+          "id": "step-3.7-flash",
+          "name": "step-3.7-flash"
+        }
+      },
+      "options": {
+        "apiKey": "2Jf9L8jQa317MeJQxOZ3sOB6u2dTnqW462hL3W9Wyj5HP19SupNC1rHa1V3QMmJ9g",
+        "baseURL": "https://api.stepfun.com/step_plan/v1"
+      },
+      "type": "openai"
+    },
+    "cavoti": {
+      "models": {
+        "deepseek-v4-flash": {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "family": "deepseek"
+        },
+        "deepseek-v4-pro": {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "family": "deepseek"
+        },
+        "claude-opus-4-6": {
+          "id": "claude-opus-4-6",
+          "name": "Claude Opus 4.6",
+          "family": "claude"
+        },
+        "gpt-5.4-mini": {
+          "id": "gpt-5.4-mini",
+          "name": "GPT 5.4 Mini",
+          "family": "gpt"
+        }
+      },
+      "options": {
+        "apiKey": "sk-pbOYaFtMX2wlwISgleLbo3LHxu0Y3oM0HzHf3bf2Scymldik",
+        "baseURL": "https://sg.cavoti.com/v1"
+      }
+    }
+  },
+  "mcp": {
+    "zhongwen-language-checker": {
+      "type": "local",
+      "command": ["node", "C:\\Users\\Administrator\\.config\\opencode\\mcp\\check_language.mjs"],
+      "enabled": true
+    },
+    "zhongwen-version-manager": {
+      "type": "local",
+      "command": ["node", "C:\\Users\\Administrator\\.config\\opencode\\mcp\\manage.mjs"],
+      "enabled": true
+    }
+  },
+  "instructions": ["chinese-rules.md"],
+  "agent": {
+    "zhongwen-agent": {
+      "description": "中文思考者身份定义 · 零干扰后台监控 · MCP自动审计",
+      "mode": "primary"
+    }
+  },
+  "default_agent": "zhongwen-agent",
+  "model": "cavoti/deepseek-v4-flash"
+}
