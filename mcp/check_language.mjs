@@ -12,10 +12,177 @@
  */
 
 import { createInterface } from 'readline';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 
 // ============================================================
-// 语言纯度分析引擎
+// 配置与路径
 // ============================================================
+
+const CONFIG_DIR = 'C:\\Users\\Administrator\\.config\\opencode';
+const AUDIT_LOG_PATH = join(CONFIG_DIR, 'logs', 'language-audit.log');
+const WHITELIST_PATH = join(CONFIG_DIR, 'whitelist.json');
+
+// ============================================================
+// 白名单机制
+// ============================================================
+
+let WHITELIST = {
+  allowed_terms: ['JWT', 'API', 'REST', 'HTTP', 'HTTPS', 'URL', 'JSON', 'SQL', 'NoSQL', 'CSS', 'HTML', 'XML', 'SDK', 'CLI', 'IDE', 'OAuth', 'TCP', 'IP', 'DNS', 'SSH', 'FTP', 'Git', 'GitHub', 'npm', 'Node.js', 'TypeScript', 'JavaScript', 'Python', 'PowerShell', 'Docker', 'Kubernetes', 'AWS', 'Azure', 'GCP'],
+  allowed_patterns: ['^[A-Z]{2,8}$', '^[a-z]+\\.[a-z]+$', '^v\\d+\\.\\d+$'],
+  check_comments: true,
+  thresholds: { purity_pass: 90, purity_warn: 70 }
+};
+
+function loadWhitelist() {
+  try {
+    if (existsSync(WHITELIST_PATH)) {
+      const custom = JSON.parse(readFileSync(WHITELIST_PATH, 'utf8'));
+      WHITELIST = { ...WHITELIST, ...custom };
+    }
+  } catch (e) {
+    // 使用默认白名单
+  }
+}
+
+loadWhitelist();
+
+function isWhitelisted(word) {
+  if (WHITELIST.allowed_terms.includes(word)) return true;
+  for (const pattern of WHITELIST.allowed_patterns) {
+    if (new RegExp(pattern).test(word)) return true;
+  }
+  return false;
+}
+
+// ============================================================
+// 修复建议映射
+// ============================================================
+
+const FIX_SUGGESTIONS = {
+  'let me': '让我',
+  'i need to': '我需要',
+  'i want to': '我想要',
+  'first of all': '首先',
+  'first': '首先',
+  'as a result': '因此',
+  'in other words': '也就是说',
+  'on the other hand': '另一方面',
+  'for example': '例如',
+  'for instance': '比如',
+  'in addition': '此外',
+  'edge case': '边界情况',
+  'fallback': '回退机制',
+  'approach': '方法',
+  'scenario': '场景',
+  'perspective': '视角',
+  'constraint': '约束条件',
+  'trade-off': '权衡',
+  'actually': '实际上',
+  'basically': '基本上',
+  'however': '然而',
+  'therefore': '因此',
+  'moreover': '此外',
+  'furthermore': '此外',
+  'instead': '取而代之',
+  'rather': '相当',
+  'otherwise': '否则',
+  'nevertheless': '然而',
+  'nonetheless': '然而',
+  'consequently': '因此',
+  'accordingly': '相应地',
+  'meanwhile': '同时',
+  'hence': '因此',
+  'thus': '因此',
+  'indeed': '确实',
+  'notably': '尤其',
+  'similarly': '类似地',
+  'thereafter': '此后',
+  'thereby': '从而',
+  'whereas': '然而',
+  'whereby': '借此',
+  'lastly': '最后',
+  'firstly': '首先',
+  'secondly': '其次',
+  'thirdly': '第三',
+  'so': '所以',
+  'well': '嗯',
+  'now': '现在',
+  'then': '然后',
+  'also': '也',
+  'but': '但是',
+  'yet': '然而',
+  'this': '这个',
+  'that': '那个',
+  'these': '这些',
+  'those': '那些',
+  'the': '这个/那个',
+  'a': '一个',
+  'an': '一个',
+  'is': '是',
+  'are': '是',
+  'was': '是',
+  'were': '是',
+  'will': '将',
+  'can': '可以',
+  'could': '可以',
+  'should': '应该',
+  'would': '将会',
+  'must': '必须',
+  'have': '有',
+  'has': '有',
+  'had': '有',
+  'do': '做',
+  'does': '做',
+  'did': '做',
+  'it': '它',
+  'he': '他',
+  'she': '她',
+  'they': '他们',
+  'we': '我们',
+  'i': '我',
+  'you': '你',
+  'me': '我',
+  'him': '他',
+  'her': '她',
+  'us': '我们',
+  'them': '他们',
+};
+
+function getFixSuggestion(englishText) {
+  const lower = englishText.toLowerCase().trim();
+  if (FIX_SUGGESTIONS[lower]) return FIX_SUGGESTIONS[lower];
+  // 尝试部分匹配
+  for (const [key, value] of Object.entries(FIX_SUGGESTIONS)) {
+    if (lower.includes(key) || key.includes(lower)) {
+      return value;
+    }
+  }
+  return '';
+}
+
+// ============================================================
+// 审计日志
+// ============================================================
+
+function writeAuditLog(report, context = 'unknown') {
+  try {
+    if (!existsSync(dirname(AUDIT_LOG_PATH))) {
+      mkdirSync(dirname(AUDIT_LOG_PATH), { recursive: true });
+    }
+    const entry = {
+      timestamp: new Date().toISOString(),
+      context,
+      status: report.status,
+      purity: report.purity,
+      violations_count: report.violations ? report.violations.length : 0,
+      details: report.details ? report.details.substring(0, 200) : ''
+    };
+    writeFileSync(AUDIT_LOG_PATH, JSON.stringify(entry) + '\n', { flag: 'a' });
+  } catch (e) {
+    // 审计日志写入失败不影响检查结果
+  }
+}
 
 /** 中文字符 Unicode 范围 */
 const CJK_RANGES = [
@@ -57,6 +224,115 @@ const ENGLISH_PATTERNS = [
 ];
 
 /**
+ * 检测中英混合短语
+ * 
+ * @param {string} line - 单行文本
+ * @returns {Array} 过渡点数组
+ */
+function detectMixedPhrases(line) {
+  const transitions = [];
+  let lastType = null;
+  for (const ch of line) {
+    const code = ch.codePointAt(0);
+    const type = isChineseChar(code) ? 'zh' : isEnglishChar(code) ? 'en' : null;
+    if (type && lastType && type !== lastType) {
+      transitions.push({ from: lastType, to: type, char: ch });
+    }
+    lastType = type;
+  }
+  return transitions;
+}
+
+/**
+ * 检查代码块注释行
+ * 
+ * @param {string} line - 代码行
+ * @returns {boolean} 是否为注释行
+ */
+function isCommentLine(line) {
+  const trimmed = line.trimStart();
+  return /^(\/\/|#|;|\/\*|\*|<!--|--|{-#|#-})/.test(trimmed);
+}
+
+/**
+ * 在文本中检测英文违规（句子/模式/填充词/混合短语）
+ * 
+ * @param {string} text - 要检查的文本
+ * @param {number} lineNumber - 行号
+ * @param {object} report - 纯度分析报告对象
+ */
+function checkEnglishInText(text, lineNumber, report) {
+  const englishWords = text.match(/\b[a-zA-Z]+\b/g) || [];
+  
+  // 过滤白名单术语
+  const filteredWords = englishWords.filter(w => !isWhitelisted(w));
+  
+  if (filteredWords.length >= 3) {
+    const joined = filteredWords.join(' ');
+    const hasEnglishEnding = /[.!?]$/.test(text.trim());
+    const hasEnglishStart = /^[A-Z]/.test(text.trim());
+
+    if (hasEnglishEnding || filteredWords.length >= 5) {
+      const suggestion = getFixSuggestion(joined);
+      report.violations.push({
+        line: lineNumber,
+        type: 'english_sentence',
+        content: text.trim().substring(0, 120),
+        wordCount: filteredWords.length,
+        suggestion: suggestion,
+      });
+      report.englishSegments.push(text.trim());
+    }
+
+    // 检查英文逻辑连接词
+    for (const pattern of ENGLISH_PATTERNS) {
+      const match = text.match(pattern);
+      if (match) {
+        const suggestion = getFixSuggestion(match[0]);
+        report.violations.push({
+          line: lineNumber,
+          type: 'english_pattern',
+          content: match[0],
+          context: text.trim().substring(0, 100),
+          suggestion: suggestion,
+        });
+        break;
+      }
+    }
+  }
+
+  // 检查英文填充词（白名单过滤后）
+  for (const word of ENGLISH_FILLER_WORDS) {
+    if (isWhitelisted(word)) continue;
+    const regex = new RegExp('\\b' + word + '\\b', 'i');
+    if (regex.test(text)) {
+      const suggestion = getFixSuggestion(word);
+      report.violations.push({
+        line: lineNumber,
+        type: 'english_filler',
+        content: word,
+        context: text.trim().substring(0, 100),
+        suggestion: suggestion,
+      });
+    }
+  }
+
+  // 检查中英混合短语
+  if (filteredWords.length > 0 && filteredWords.length < 5) {
+    const transitions = detectMixedPhrases(text);
+    if (transitions.length >= 3) {
+      report.violations.push({
+        line: lineNumber,
+        type: 'mixed_phrase',
+        content: text.trim().substring(0, 120),
+        transition_count: transitions.length,
+        suggestion: '考虑将英文片段替换为中文表达',
+      });
+    }
+  }
+}
+
+/**
  * 分析文本的语言纯度
  * 
  * @param {string} text - 要分析的文本
@@ -93,8 +369,14 @@ function analyzePurity(text, options = {}) {
       continue;
     }
 
-    // 如果处于代码块模式且启用跳过
+    // 代码块处理：根据配置决定是否跳过
     if (inCodeBlock && options.codeBlockMode) {
+      // 如果启用了注释检查，仍然检查注释行
+      if (WHITELIST.check_comments && isCommentLine(line)) {
+        // 对注释行进行语言检查（略过字符统计，只检测违规）
+        const commentText = line.replace(/^(\/\/|#|;|\/\*|\*|<!--|--|{-#|#-})\s*/, '');
+        checkEnglishInText(commentText, i + 1, report);
+      }
       continue;
     }
 
@@ -119,52 +401,9 @@ function analyzePurity(text, options = {}) {
       }
     }
 
-    // 检测英文句子/短语
+    // 检测英文违规（句子/模式/填充词/混合短语）
     if (report.englishChars > 0) {
-      // 检查完整英文句子（超过5个英文单词 + 句尾标点）
-      const englishWords = currentLine.match(/\b[a-zA-Z]+\b/g) || [];
-      if (englishWords.length >= 3) {
-        const joined = englishWords.join(' ');
-        const hasEnglishEnding = /[.!?]$/.test(currentLine.trim());
-        const hasEnglishStart = /^[A-Z]/.test(currentLine.trim());
-
-        if (hasEnglishEnding || englishWords.length >= 5) {
-          report.violations.push({
-            line: i + 1,
-            type: 'english_sentence',
-            content: currentLine.trim().substring(0, 120),
-            wordCount: englishWords.length,
-          });
-          report.englishSegments.push(currentLine.trim());
-        }
-
-        // 检查英文逻辑连接词
-        for (const pattern of ENGLISH_PATTERNS) {
-          const match = currentLine.match(pattern);
-          if (match) {
-            report.violations.push({
-              line: i + 1,
-              type: 'english_pattern',
-              content: match[0],
-              context: currentLine.trim().substring(0, 100),
-            });
-            break;
-          }
-        }
-      }
-
-      // 检查英文填充词
-      for (const word of ENGLISH_FILLER_WORDS) {
-        const regex = new RegExp('\\b' + word + '\\b', 'i');
-        if (regex.test(currentLine)) {
-          report.violations.push({
-            line: i + 1,
-            type: 'english_filler',
-            content: word,
-            context: currentLine.trim().substring(0, 100),
-          });
-        }
-      }
+      checkEnglishInText(currentLine, i + 1, report);
     }
   }
 
@@ -347,6 +586,9 @@ function handleRequest(request) {
         }
 
         const report = analyzePurity(text, { codeBlockMode });
+
+        // 写入审计日志（异步，不阻塞响应）
+        writeAuditLog(report, 'self-check');
 
         if (report.status === 'FAIL') {
           sessionTracker.violations++;
