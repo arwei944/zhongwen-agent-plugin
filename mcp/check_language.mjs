@@ -34,9 +34,7 @@ import { rotateLogs } from './log-rotation.mjs';
 
 const CONFIG_DIR = 'C:\\Users\\Administrator\\.config\\opencode';
 const AUDIT_LOG_PATH = join(CONFIG_DIR, 'logs', 'language-audit.log');
-const AUDIT_FULL_LOG = join(CONFIG_DIR, 'logs', 'audit-full.log');
 const AUDIT_VIOLATIONS_LOG = join(CONFIG_DIR, 'logs', 'audit-violations.log');
-const AUDIT_SUMMARY_LOG = join(CONFIG_DIR, 'logs', 'audit-summary.log');
 const WHITELIST_PATH = join(CONFIG_DIR, 'whitelist.json');
 
 // ============================================================
@@ -182,6 +180,11 @@ function getFixSuggestion(englishText) {
 // ============================================================
 
 function writeAuditLog(report, context = 'unknown', sessionId = null) {
+  // 仅记录违规项到审计日志
+  if (report.status !== 'FAIL') {
+    return; // 非违规不记录
+  }
+  
   const timestamp = new Date().toISOString();
   const entry = {
     timestamp,
@@ -192,26 +195,14 @@ function writeAuditLog(report, context = 'unknown', sessionId = null) {
     details: report.details ? report.details.substring(0, 200) : ''
   };
   
-  // 写入全量日志（audit-full.log）
+  // 写入违规日志（audit-violations.log）
   try {
-    if (!existsSync(dirname(AUDIT_FULL_LOG))) {
-      mkdirSync(dirname(AUDIT_FULL_LOG), { recursive: true });
+    if (!existsSync(dirname(AUDIT_VIOLATIONS_LOG))) {
+      mkdirSync(dirname(AUDIT_VIOLATIONS_LOG), { recursive: true });
     }
-    writeFileSync(AUDIT_FULL_LOG, JSON.stringify(entry) + '\n', { flag: 'a' });
+    writeFileSync(AUDIT_VIOLATIONS_LOG, JSON.stringify(entry) + '\n', { flag: 'a' });
   } catch (e) {
     // 写入失败不影响主流程
-  }
-  
-  // 写入违规日志（audit-violations.log）- 仅记录违规
-  if (report.status === 'FAIL') {
-    try {
-      if (!existsSync(dirname(AUDIT_VIOLATIONS_LOG))) {
-        mkdirSync(dirname(AUDIT_VIOLATIONS_LOG), { recursive: true });
-      }
-      writeFileSync(AUDIT_VIOLATIONS_LOG, JSON.stringify(entry) + '\n', { flag: 'a' });
-    } catch (e) {
-      // 写入失败不影响主流程
-    }
   }
   
   // 写入旧格式日志（保持向后兼容）
@@ -565,6 +556,22 @@ function handleRequest(request) {
           version: '3.0.0',
         },
       });
+      
+      // 调试输出
+      console.error('[zhongwen-mcp] initialize 完成', {
+        dbInitialized,
+        currentSession: currentSession || 'null/undefined',
+        db_exists: !!db
+      });
+      
+      // 在 initialize 后启动后台检查器（兼容不发送 notifications/initialized 的客户端）
+      if (currentSession) {
+        console.error('[zhongwen-mcp] 准备启动后台检查器...');
+        startBackgroundChecker(currentSession);
+      } else {
+        console.error('[zhongwen-mcp] 未启动后台检查器：currentSession 为空');
+      }
+      
       break;
 
     // -------- 通知已初始化 --------
@@ -920,20 +927,7 @@ function performBackgroundCheck() {
   if (!db || !backgroundChecker.sessionId) return;
   
   try {
-    // 创建一个心跳检查记录
-    const report = {
-      purity: 100.0,
-      status: 'PASS',
-      violations: [],
-      details: '后台心跳检查',
-      chineseChars: 0,
-      englishChars: 0,
-      totalChars: 0
-    };
-    
-    writeAuditLog(report, 'background', backgroundChecker.sessionId);
-    
-    // 检查是否需要告警
+    // 仅检查告警条件，不写入日志（避免无意义的 PASS 记录）
     checkAlerts();
   } catch (e) {
     // 后台检查失败不影响主流程

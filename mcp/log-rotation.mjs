@@ -32,9 +32,7 @@ const CONFIG = {
 // 需要轮转的日志文件
 const LOG_FILES = [
   'language-audit.log',
-  'audit-full.log',
   'audit-violations.log',
-  'audit-summary.log',
   'manage.log'
 ];
 
