@@ -1,5 +1,32 @@
 # 版本历史
 
+## v4.1.0-proposal · 2026-06-25 · 可选升级：强制门卫模式
+
+**核心理念**：在保持零干扰模式作为默认的前提下，提供强制门卫模式作为可选升级。
+
+### 新增文件
+
+- `chinese-rules-guard.md`：强制门卫版系统指令（强制检查 + 输出标记 + 禁止行为）
+- `zhongwen-agent-guard.md`：强制门卫版 Agent 定义（含强制门卫协议）
+- `scripts/upgrade-to-guard.ps1`：一键升级到强制门卫模式
+- `scripts/rollback-to-zero-interference.ps1`：一键回滚到零干扰模式
+
+### 文件调整
+
+- `chinese-rules.md`：恢复为零干扰版（25 行，身份定义 + 中文化表达 + 可选自检）
+- `zhongwen-agent.md`：恢复为零干扰版（8 行，纯身份定义）
+
+### 双版本共存设计
+
+| 模式 | 文件 | 说明 |
+|:---|:---|:---|
+| 零干扰（默认） | `chinese-rules.md` + `zhongwen-agent.md` | 可选自检，零干扰 |
+| 强制门卫（可选） | `chinese-rules-guard.md` + `zhongwen-agent-guard.md` | 强制检查，输出标记 |
+
+升级/回滚脚本一键切换，升级前自动备份，可随时回滚。
+
+---
+
 ## v4.0.0 · 2026-06-25 · 智能化可视化增强统计版
 
 **核心理念**：在保持零干扰原则的前提下，实现智能化、可视化、增强统计三大能力升级。

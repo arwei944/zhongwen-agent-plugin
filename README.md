@@ -39,15 +39,22 @@
 zhongwen-agent-plugin/
 ├── README.md                    ← 本文档
 ├── CHANGELOG.md                 ← 版本历史
-├── chinese-rules.md             ← 全局指令文件
-├── zhongwen-agent.md            ← Agent 定义文件
+├── chinese-rules.md             ← 系统指令文件（零干扰版，默认）
+├── chinese-rules-guard.md       ← 系统指令文件（强制门卫版，可选升级）
+├── zhongwen-agent.md            ← Agent 定义文件（零干扰版，默认）
+├── zhongwen-agent-guard.md      ← Agent 定义文件（强制门卫版，可选升级）
 ├── mcp/
 │   ├── check_language.mjs       ← MCP 语言检查服务器
+│   ├── dashboard.mjs            ← Web 可视化仪表盘
+│   ├── database.mjs             ← SQLite 数据库模块
+│   ├── log-rotation.mjs         ← 日志轮转模块
 │   └── manage.mjs              ← 版本管理工具
 ├── scripts/
 │   ├── install.ps1              ← 一键安装脚本
 │   ├── rollback.ps1             ← 一键回滚脚本
-│   └── upgrade.ps1              ← 一键升级脚本
+│   ├── upgrade.ps1              ← 一键升级脚本
+│   ├── upgrade-to-guard.ps1     ← 升级到强制门卫模式
+│   └── rollback-to-zero-interference.ps1 ← 回滚到零干扰模式
 └── versions/                    ← 本地版本快照目录（自动生成）
 ```
 
@@ -309,7 +316,103 @@ const FIX_SUGGESTIONS = {
 - `zhongwen_dashboard`：获取完整仪表板数据（支持 7d/30d/all 时间范围）
 - `zhongwen_open_dashboard`：一键打开 Web 仪表盘
 
+## 可选升级：强制门卫模式
+
+> **版本**：v4.1.0-proposal · **状态**：可选升级，非默认方案  
+> **兼容性**：与 v4.0.0 完全兼容，可随时回滚
+
+### 什么是强制门卫模式
+
+v4.0.0 采用**零干扰模式**——检查系统在后台运行，AI 可以选择是否调用检查工具，监控覆盖率接近 0%。
+
+**强制门卫模式**将"可选自检"升级为"强制门卫"，要求 AI 在每次输出前必须调用 `check_chinese_purity` 工具验证。检查结果嵌入输出末尾，让中文约束**可执行、可验证、不可绕过**。
+
+### 与零干扰模式对比
+
+| 特性 | 零干扰模式（默认） | 强制门卫模式（可选升级） |
+|:---|:---|:---|
+| 监控覆盖率 | ≈ 0%（依赖 AI 自觉） | ≈ 100%（强制调用） |
+| AI 行为改变 | 无 | 输出前必须检查 |
+| 输出格式 | 无附加内容 | 末尾附加检查标记 |
+| 用户感知 | 无感知 | 看到检查标记 |
+| 工程化保证 | 软约束（可选） | 硬约束（强制） |
+
+### 启用方式
+
+```powershell
+.\scripts\upgrade-to-guard.ps1
+```
+
+一键升级脚本会自动：
+1. 备份当前配置（`~/.config/opencode/backups/guard-upgrade-<timestamp>/`）
+2. 将 `chinese-rules-guard.md` 和 `zhongwen-agent-guard.md` 部署到配置目录
+3. 验证文件内容是否正确
+
+### 手动启用
+
+将 guard 文件复制到配置目录：
+
+```powershell
+# 备份当前配置
+Copy-Item "$env:USERPROFILE\.config\opencode\chinese-rules.md" "<备份目录>\chinese-rules.md"
+Copy-Item "$env:USERPROFILE\.config\opencode\agents\zhongwen-agent.md" "<备份目录>\zhongwen-agent.md"
+
+# 部署 guard 版
+Copy-Item chinese-rules-guard.md "$env:USERPROFILE\.config\opencode\chinese-rules.md"
+Copy-Item zhongwen-agent-guard.md "$env:USERPROFILE\.config\opencode\agents\zhongwen-agent.md"
+```
+
+### 回滚方式
+
+```powershell
+.\scripts\rollback-to-zero-interference.ps1
+```
+
+会自动从最近的 `guard-upgrade-*` 备份中恢复。
+
+### 输出格式变化
+
+**启用前（零干扰模式）**：
+```
+用户：写一个登录系统
+
+AI：这是一个使用 JWT（JSON Web Token）的登录系统实现...
+[正常输出，无附加内容]
+```
+
+**启用后（强制门卫模式）**：
+```
+用户：写一个登录系统
+
+AI：这是一个使用 JWT（JSON Web Token）的登录系统实现...
+
+【语言纯度检查：PASS | 纯度：95% | 违规数：0 | 检查次数：1】
+```
+
+### 文件说明
+
+| 文件 | 说明 |
+|:---|:---|
+| `chinese-rules.md` | 零干扰版系统指令（默认，可选自检） |
+| `chinese-rules-guard.md` | 强制门卫版系统指令（可选升级，强制检查） |
+| `zhongwen-agent.md` | 零干扰版 Agent 定义（默认，纯身份定义） |
+| `zhongwen-agent-guard.md` | 强制门卫版 Agent 定义（可选升级，含强制门卫协议） |
+| `scripts/upgrade-to-guard.ps1` | 一键升级脚本 |
+| `scripts/rollback-to-zero-interference.ps1` | 一键回滚脚本 |
+
+---
+
 ## 版本历史
+
+### v4.1.0-proposal (2026-06-25) · 强制门卫模式（可选升级）
+
+**核心变更：**
+- 新增 `chinese-rules-guard.md`：强制门卫版系统指令（强制检查 + 输出标记 + 禁止行为）
+- 新增 `zhongwen-agent-guard.md`：强制门卫版 Agent 定义（含强制门卫协议）
+- 新增 `scripts/upgrade-to-guard.ps1`：一键升级到强制门卫模式
+- 新增 `scripts/rollback-to-zero-interference.ps1`：一键回滚到零干扰模式
+- 零干扰版文件（`chinese-rules.md` / `zhongwen-agent.md`）恢复为纯身份定义
+- 零干扰与强制门卫双版本共存，用户可自由选择
 
 ### v3.0.0 (2026-06-24) · 零干扰强约束重构版
 
