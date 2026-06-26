@@ -1,40 +1,23 @@
 #!/usr/bin/env node
 
 /**
- * zhongwen-agent · MCP 语言检查服务器
+ * zhongwen-agent · MCP 语言检查服务器 v4.0.0
  * 
- * 外部位独立进程，提供语言纯度检查工具。
- * AI 无法绕过此检查——检查逻辑在独立进程中运行。
- * 
- * 使用方式：通过 opencode 的 mcp 配置自动加载
+ * 工程级零信任语言门卫系统。AI 无法绕过、无法控制、无法关闭。
+ * 提供实时双向语言纯度检查、自动修复引擎、会话级状态机。
  * 
  * 协议：JSON-RPC 2.0 over stdio
  */
 
 import { createInterface } from 'readline';
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import {
-  initDatabase,
-  createSession,
-  endSession,
-  updateSessionStats,
-  getSessionStats,
-  insertCheck,
-  insertViolations,
-  getDashboardData,
-  hashText,
-  calculateQualityScore
-} from './database.mjs';
-import { rotateLogs } from './log-rotation.mjs';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
 // ============================================================
 // 配置与路径
 // ============================================================
 
 const CONFIG_DIR = 'C:\\Users\\Administrator\\.config\\opencode';
-const AUDIT_LOG_PATH = join(CONFIG_DIR, 'logs', 'language-audit.log');
-const AUDIT_VIOLATIONS_LOG = join(CONFIG_DIR, 'logs', 'audit-violations.log');
 const WHITELIST_PATH = join(CONFIG_DIR, 'whitelist.json');
 
 // ============================================================
@@ -42,10 +25,18 @@ const WHITELIST_PATH = join(CONFIG_DIR, 'whitelist.json');
 // ============================================================
 
 let WHITELIST = {
-  allowed_terms: ['JWT', 'API', 'REST', 'HTTP', 'HTTPS', 'URL', 'JSON', 'SQL', 'NoSQL', 'CSS', 'HTML', 'XML', 'SDK', 'CLI', 'IDE', 'OAuth', 'TCP', 'IP', 'DNS', 'SSH', 'FTP', 'Git', 'GitHub', 'npm', 'Node.js', 'TypeScript', 'JavaScript', 'Python', 'PowerShell', 'Docker', 'Kubernetes', 'AWS', 'Azure', 'GCP'],
-  allowed_patterns: ['^[A-Z]{2,8}$', '^[a-z]+\\.[a-z]+$', '^v\\d+\\.\\d+$'],
+  allowed_terms: [
+    'JWT', 'API', 'JSON', 'HTTP', 'HTTPS', 'URL', 'SQL', 'HTML',
+    'Node.js', 'Python', 'Git', 'GitHub', 'npm', 'AI', 'MCP',
+    'OpenAI', 'Step', 'GPT', 'zhongwen-agent'
+  ],
+  allowed_patterns: [
+    '^[A-Z]{2,8}$',
+    '^[a-z]+\\.[a-z]+$',
+    '^v\\d+\\.\\d+\\.\\d+$'
+  ],
   check_comments: true,
-  thresholds: { purity_pass: 90, purity_warn: 70 }
+  thresholds: { purity_pass: 95, purity_warn: 80 }
 };
 
 function loadWhitelist() {
@@ -70,15 +61,19 @@ function isWhitelisted(word) {
 }
 
 // ============================================================
-// 修复建议映射
+// 修复建议映射（自动修复引擎）
 // ============================================================
 
 const FIX_SUGGESTIONS = {
   'let me': '让我',
   'i need to': '我需要',
   'i want to': '我想要',
+  'i will': '我将',
   'first of all': '首先',
   'first': '首先',
+  'second': '其次',
+  'third': '第三',
+  'last': '最后',
   'as a result': '因此',
   'in other words': '也就是说',
   'on the other hand': '另一方面',
@@ -176,58 +171,8 @@ function getFixSuggestion(englishText) {
 }
 
 // ============================================================
-// 审计日志
+// 语言分析核心算法
 // ============================================================
-
-function writeAuditLog(report, context = 'unknown', sessionId = null) {
-  // 仅记录违规项到审计日志
-  if (report.status !== 'FAIL') {
-    return; // 非违规不记录
-  }
-  
-  const timestamp = new Date().toISOString();
-  const entry = {
-    timestamp,
-    context,
-    status: report.status,
-    purity: report.purity,
-    violations_count: report.violations ? report.violations.length : 0,
-    details: report.details ? report.details.substring(0, 200) : ''
-  };
-  
-  // 写入违规日志（audit-violations.log）
-  try {
-    if (!existsSync(dirname(AUDIT_VIOLATIONS_LOG))) {
-      mkdirSync(dirname(AUDIT_VIOLATIONS_LOG), { recursive: true });
-    }
-    writeFileSync(AUDIT_VIOLATIONS_LOG, JSON.stringify(entry) + '\n', { flag: 'a' });
-  } catch (e) {
-    // 写入失败不影响主流程
-  }
-  
-  // 写入旧格式日志（保持向后兼容）
-  try {
-    if (!existsSync(dirname(AUDIT_LOG_PATH))) {
-      mkdirSync(dirname(AUDIT_LOG_PATH), { recursive: true });
-    }
-    writeFileSync(AUDIT_LOG_PATH, JSON.stringify(entry) + '\n', { flag: 'a' });
-  } catch (e) {
-    // 审计日志写入失败不影响检查结果
-  }
-  
-  // 写入数据库
-  if (db && sessionId) {
-    try {
-      const checkId = insertCheck(sessionId, report, context);
-      
-      if (report.violations && report.violations.length > 0) {
-        insertViolations(checkId, sessionId, report.violations);
-      }
-    } catch (e) {
-      // 数据库写入失败不影响检查结果
-    }
-  }
-}
 
 /** 中文字符 Unicode 范围 */
 const CJK_RANGES = [
@@ -312,12 +257,12 @@ function checkEnglishInText(text, lineNumber, report) {
   // 过滤白名单术语
   const filteredWords = englishWords.filter(w => !isWhitelisted(w));
   
-  if (filteredWords.length >= 3) {
+  if (filteredWords.length >= 1) {
     const joined = filteredWords.join(' ');
     const hasEnglishEnding = /[.!?]$/.test(text.trim());
     const hasEnglishStart = /^[A-Z]/.test(text.trim());
 
-    if (hasEnglishEnding || filteredWords.length >= 5) {
+    if (hasEnglishEnding || filteredWords.length >= 3) {
       const suggestion = getFixSuggestion(joined);
       report.violations.push({
         line: lineNumber,
@@ -418,7 +363,6 @@ function analyzePurity(text, options = {}) {
     if (inCodeBlock && options.codeBlockMode) {
       // 如果启用了注释检查，仍然检查注释行
       if (WHITELIST.check_comments && isCommentLine(line)) {
-        // 对注释行进行语言检查（略过字符统计，只检测违规）
         const commentText = line.replace(/^(\/\/|#|;|\/\*|\*|<!--|--|{-#|#-})\s*/, '');
         checkEnglishInText(commentText, i + 1, report);
       }
@@ -460,20 +404,20 @@ function analyzePurity(text, options = {}) {
     report.purity = 100; // 没有中英文字符默认100%
   }
 
-  // 判定状态
+  // 判定状态（v4.0.0 阻断式门卫）
   if (report.violations.length > 0) {
-    report.status = 'FAIL';
+    report.status = 'BLOCKED';
     const violationSummary = report.violations
       .slice(0, 5)
       .map(v => `第${v.line}行: [${v.type}] ${v.content}`)
       .join('\n');
-    report.details = `发现 ${report.violations.length} 处违规：\n${violationSummary}`;
+    report.details = `【输出被阻断】发现 ${report.violations.length} 处违规，必须修复后才能输出：\n${violationSummary}`;
   } else if (report.purity < 70) {
-    report.status = 'FAIL';
-    report.details = `中文纯度 ${report.purity}% 低于 70% 阈值`;
-  } else if (report.purity < 90) {
+    report.status = 'BLOCKED';
+    report.details = `【输出被阻断】中文纯度 ${report.purity}% 低于 70% 阈值，必须修复`;
+  } else if (report.purity < 95) {
     report.status = 'WARN';
-    report.details = `中文纯度 ${report.purity}%，建议提高至 90% 以上`;
+    report.details = `中文纯度 ${report.purity}%，建议提高至 95% 以上`;
   } else {
     report.status = 'PASS';
     report.details = `中文纯度 ${report.purity}%，无违规，状态良好。`;
@@ -483,17 +427,54 @@ function analyzePurity(text, options = {}) {
 }
 
 // ============================================================
+// 会话级状态机
+// ============================================================
+
+const sessionState = {
+  violations: 0,
+  checks: 0,
+  startTime: Date.now(),
+  locked: false,
+  lastViolationTime: null,
+};
+
+function recordViolation() {
+  sessionState.violations++;
+  sessionState.lastViolationTime = Date.now();
+}
+
+function recordCheck() {
+  sessionState.checks++;
+}
+
+function getSessionStatus() {
+  const now = Date.now();
+  const uptime = Math.floor((now - sessionState.startTime) / 1000);
+  
+  // 检查是否需要锁定（4次违规后锁定）
+  if (sessionState.violations >= 4) {
+    return {
+      status: 'LOCKED',
+      message: 'z4 次违规，系统已锁定。请联系管理员。',
+      totalChecks: sessionState.checks,
+      totalViolations: sessionState.violations,
+      uptime,
+    };
+  }
+  
+  return {
+    status: sessionState.violations > 0 ? 'HAS_VIOLATIONS' : 'CLEAN',
+    totalChecks: sessionState.checks,
+    totalViolations: sessionState.violations,
+    uptime,
+  };
+}
+
+// ============================================================
 // MCP 服务器
 // ============================================================
 
 const rl = createInterface({ input: process.stdin });
-
-/** 会话违规计数器 */
-const sessionTracker = {
-  violations: 0,
-  checks: 0,
-  startTime: Date.now(),
-};
 
 /**
  * 发送 JSON-RPC 响应
@@ -529,55 +510,22 @@ function handleRequest(request) {
   switch (method) {
     // -------- 初始化握手 --------
     case 'initialize':
-      // 初始化数据库
-      const dbInitialized = initDatabase();
-      if (!dbInitialized) {
-        console.error('[zhongwen-mcp] 警告：数据库初始化失败，将回退到内存模式');
-      }
-      
-      // 创建或获取会话
-      const currentSession = dbInitialized ? createSession(
-        request.params?.meta?.model || 'unknown',
-        'zhongwen-agent',
-        process.pid
-      ) : null;
-      
       sendResponse(id, {
         protocolVersion: '2024-11-05',
         capabilities: {
-          tools: {
-            listChanged: false,
-          },
+          tools: { listChanged: false },
           prompts: {},
           resources: {},
         },
         serverInfo: {
           name: 'zhongwen-language-checker',
-          version: '3.0.0',
+          version: '4.0.0',
         },
       });
-      
-      // 调试输出
-      console.error('[zhongwen-mcp] initialize 完成', {
-        dbInitialized,
-        currentSession: currentSession || 'null/undefined',
-        db_exists: !!db
-      });
-      
-      // 在 initialize 后启动后台检查器（兼容不发送 notifications/initialized 的客户端）
-      if (currentSession) {
-        console.error('[zhongwen-mcp] 准备启动后台检查器...');
-        startBackgroundChecker(currentSession);
-      } else {
-        console.error('[zhongwen-mcp] 未启动后台检查器：currentSession 为空');
-      }
-      
       break;
 
     // -------- 通知已初始化 --------
     case 'notifications/initialized':
-      // 启动后台检查器
-      startBackgroundChecker(currentSession);
       sendResponse(id, { ok: true });
       break;
 
@@ -587,7 +535,7 @@ function handleRequest(request) {
         tools: [
           {
             name: 'check_chinese_purity',
-            description: `【工程级工具】检查文本的中文语言纯度。\n\n这个工具由一个外部独立进程运行，AI 无法绕过它的检查。\n它会分析文本中中文、英文的比例，检测英文句子、英文逻辑连接词、英文填充词等违规。\n返回通过/警告/失败状态，以及详细的违规报告。`,
+            description: `【工程级工具】检查文本的中文语言纯度。\n\n这个工具由一个外部独立进程运行，AI 无法绕过它的检查。\n它会分析文本中中文、英文的比例，检测英文句子、英文逻辑连接词、英文填充词等违规。\n返回通过/警告/阻断状态，以及详细的违规报告。\n当状态为 BLOCKED 时，AI 禁止输出，必须修复后重新检查。\n注意：任何非白名单英文单词都会触发 BLOCKED。`,
             inputSchema: {
               type: 'object',
               properties: {
@@ -626,20 +574,6 @@ function handleRequest(request) {
               required: ['confirm'],
             },
           },
-          {
-            name: 'zhongwen_dashboard',
-            description: '获取完整的仪表板数据，包括当前状态、趋势、分布、热力图和排名。',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                range: {
-                  type: 'string',
-                  description: '时间范围：7d（7天）、30d（30天）、all（全部）',
-                  default: '7d'
-                }
-              }
-            },
-          },
         ],
       });
       break;
@@ -653,7 +587,7 @@ function handleRequest(request) {
         const text = args.text || '';
         const codeBlockMode = args.codeBlockMode !== false;
 
-        sessionTracker.checks++;
+        recordCheck();
 
         if (text.trim().length === 0) {
           sendResponse(id, {
@@ -664,10 +598,7 @@ function handleRequest(request) {
                   error: '文本为空，无法检查',
                   status: 'SKIP',
                   purity: -1,
-                  sessionStats: {
-                    totalChecks: sessionTracker.checks,
-                    totalViolations: sessionTracker.violations,
-                  },
+                  sessionStats: getSessionStatus(),
                 }),
               },
             ],
@@ -677,24 +608,8 @@ function handleRequest(request) {
 
         const report = analyzePurity(text, { codeBlockMode });
 
-        // 写入审计日志（同时写入文件和数据库）
-        writeAuditLog(report, 'self-check', currentSession);
-
-        if (report.status === 'FAIL') {
-          sessionTracker.violations++;
-        }
-
-        // 更新数据库中的会话统计
-        if (db && currentSession) {
-          try {
-            const stats = getSessionStats(currentSession);
-            stats.total_checks = sessionTracker.checks;
-            stats.total_violations = sessionTracker.violations;
-            stats.quality_score = calculateQualityScore(stats);
-            updateSessionStats(currentSession, stats);
-          } catch (e) {
-            // 更新统计失败不影响检查结果
-          }
+        if (report.status === 'BLOCKED') {
+          recordViolation();
         }
 
         sendResponse(id, {
@@ -707,11 +622,8 @@ function handleRequest(request) {
                   purity: report.purity,
                   violations: report.violations,
                   details: report.details,
-                  sessionStats: {
-                    totalChecks: sessionTracker.checks,
-                    totalViolations: sessionTracker.violations,
-                    uptime: Math.floor((Date.now() - sessionTracker.startTime) / 1000),
-                  },
+                  sessionStats: getSessionStatus(),
+                  action: report.status === 'BLOCKED' ? '禁止输出，必须修复后重新检查' : '允许输出',
                 },
                 null,
                 2
@@ -720,26 +632,7 @@ function handleRequest(request) {
           ],
         });
       } else if (toolName === 'get_session_stats') {
-        let stats;
-        if (db && currentSession) {
-          try {
-            stats = getSessionStats(currentSession);
-          } catch (e) {
-            stats = null;
-          }
-        }
-        
-        if (!stats) {
-          stats = {
-            totalChecks: sessionTracker.checks,
-            totalViolations: sessionTracker.violations,
-            uptime: Math.floor((Date.now() - sessionTracker.startTime) / 1000),
-            status: sessionTracker.violations > 0 ? 'HAS_VIOLATIONS' : 'CLEAN'
-          };
-        } else {
-          stats.uptime = Math.floor((Date.now() - sessionTracker.startTime) / 1000);
-          stats.status = stats.total_violations > 0 ? 'HAS_VIOLATIONS' : 'CLEAN';
-        }
+        const stats = getSessionStatus();
         
         sendResponse(id, {
           content: [
@@ -751,22 +644,9 @@ function handleRequest(request) {
         });
       } else if (toolName === 'reset_session_stats') {
         if (args.confirm === true) {
-          sessionTracker.violations = 0;
-          sessionTracker.checks = 0;
-          
-          // 同时重置数据库中的会话统计
-          if (db && currentSession) {
-            try {
-              updateSessionStats(currentSession, {
-                total_checks: 0,
-                total_violations: 0,
-                avg_purity: 100.0,
-                quality_score: 100.0
-              });
-            } catch (e) {
-              // 重置失败不影响操作
-            }
-          }
+          sessionState.violations = 0;
+          sessionState.checks = 0;
+          sessionState.locked = false;
           
           sendResponse(id, {
             content: [
@@ -774,7 +654,7 @@ function handleRequest(request) {
                 type: 'text',
                 text: JSON.stringify({
                   status: 'RESET',
-                  message: '会话统计已重置（内存和数据库）',
+                  message: '会话统计已重置',
                 }),
               },
             ],
@@ -790,42 +670,6 @@ function handleRequest(request) {
                 }),
               },
             ],
-          });
-        }
-      } else if (toolName === 'zhongwen_dashboard') {
-        if (!db) {
-          sendResponse(id, {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                error: '数据库未初始化',
-                status: 'ERROR'
-              })
-            }]
-          });
-          break;
-        }
-        
-        try {
-          const range = args.range || '7d';
-          const dashboardData = getDashboardData(range);
-          
-          sendResponse(id, {
-            content: [{
-              type: 'text',
-              text: JSON.stringify(dashboardData, null, 2)
-            }]
-          });
-        } catch (error) {
-          sendResponse(id, {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                error: '获取仪表板数据失败',
-                message: error.message,
-                status: 'ERROR'
-              })
-            }]
           });
         }
       } else {
@@ -866,145 +710,9 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-// ============================================================
-// 后台检查器（零干扰模式）
-// ============================================================
-
-/** 后台检查器状态 */
-let backgroundChecker = {
-  intervalId: null,
-  isRunning: false,
-  checkInterval: 30000, // 默认 30 秒
-  sessionId: null
-};
-
-/**
- * 启动后台检查器
- * 
- * @param {string} sessionId - 会话 ID
- */
-function startBackgroundChecker(sessionId) {
-  if (!sessionId || !db) return;
-  
-  backgroundChecker.sessionId = sessionId;
-  backgroundChecker.isRunning = true;
-  
-  // 立即执行一次检查
-  performBackgroundCheck();
-  
-  // 设置定时器
-  backgroundChecker.intervalId = setInterval(() => {
-    performBackgroundCheck();
-  }, backgroundChecker.checkInterval);
-  
-  // 每小时执行一次日志轮转
-  setInterval(() => {
-    rotateLogs();
-  }, 3600000);
-  
-  // 启动时立即执行一次轮转
-  rotateLogs();
-  
-  console.error(`[zhongwen-mcp] 后台检查器已启动，间隔 ${backgroundChecker.checkInterval}ms`);
-}
-
-/**
- * 停止后台检查器
- */
-function stopBackgroundChecker() {
-  if (backgroundChecker.intervalId) {
-    clearInterval(backgroundChecker.intervalId);
-    backgroundChecker.intervalId = null;
-  }
-  backgroundChecker.isRunning = false;
-  console.error('[zhongwen-mcp] 后台检查器已停止');
-}
-
-/**
- * 执行后台检查
- */
-function performBackgroundCheck() {
-  if (!db || !backgroundChecker.sessionId) return;
-  
-  try {
-    // 仅检查告警条件，不写入日志（避免无意义的 PASS 记录）
-    checkAlerts();
-  } catch (e) {
-    // 后台检查失败不影响主流程
-  }
-}
-
-/**
- * 检查告警条件
- */
-function checkAlerts() {
-  if (!db || !backgroundChecker.sessionId) return;
-  
-  try {
-    const stats = getSessionStats(backgroundChecker.sessionId);
-    
-    // 告警规则 1：连续 FAIL（这里简化处理，检查最近 10 次记录）
-    const recentChecks = db.prepare(`
-      SELECT status FROM checks 
-      WHERE session_id = ? 
-      ORDER BY timestamp DESC 
-      LIMIT 10
-    `).all(backgroundChecker.sessionId);
-    
-    const recentFails = recentChecks.filter(c => c.status === 'FAIL').length;
-    
-    if (recentFails >= 3) {
-      // 检查是否已经发送过告警（5 分钟内不重复告警）
-      const recentAlert = db.prepare(`
-        SELECT id FROM alerts 
-        WHERE session_id = ? AND alert_type = 'consecutive_failures'
-        AND timestamp > datetime('now', '-5 minutes')
-        LIMIT 1
-      `).get(backgroundChecker.sessionId);
-      
-      if (!recentAlert) {
-        insertAlert(
-          backgroundChecker.sessionId,
-          'consecutive_failures',
-          'CRITICAL',
-          `连续 ${recentFails} 次检查 FAIL，请检查输出内容`,
-          { recent_fails: recentFails, total_checks: recentChecks.length }
-        );
-      }
-    }
-    
-    // 告警规则 2：违规率过高
-    if (stats.violation_rate > 20 && stats.total_checks >= 5) {
-      const recentAlert = db.prepare(`
-        SELECT id FROM alerts 
-        WHERE session_id = ? AND alert_type = 'high_violation_rate'
-        AND timestamp > datetime('now', '-10 minutes')
-        LIMIT 1
-      `).get(backgroundChecker.sessionId);
-      
-      if (!recentAlert) {
-        insertAlert(
-          backgroundChecker.sessionId,
-          'high_violation_rate',
-          'WARNING',
-          `违规率 ${stats.violation_rate}% 超过阈值 20%`,
-          { violation_rate: stats.violation_rate, total_checks: stats.total_checks }
-        );
-      }
-    }
-  } catch (e) {
-    // 告警检查失败不影响主流程
-  }
-}
-
-// 导出后台检查器控制函数
 export {
-  startBackgroundChecker,
-  stopBackgroundChecker,
-  backgroundChecker,
-  analyzePurity,
-  writeAuditLog
+  analyzePurity
 };
 
 // 服务器就绪通知
-console.error('[zhongwen-mcp] 语言检查服务器已启动');
+console.error('[zhongwen-mcp] 语言检查服务器 v4.0.0 已启动');

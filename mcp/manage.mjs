@@ -24,9 +24,6 @@ const CONFIG_DIR = 'C:\\Users\\Administrator\\.config\\opencode';
 const VERSIONS_DIR = join(CONFIG_DIR, 'versions');
 const MANIFEST_PATH = join(VERSIONS_DIR, 'manifest.json');
 const PLUGIN_DIR = 'D:\\work\\opencode\\zhongwen-agent-plugin';
-const LOG_PATH = join(CONFIG_DIR, 'logs', 'manage.log');
-const HOST = '127.0.0.1';
-const PORT = 3000;
 
 const MANAGED_FILES = [
   { source: join(PLUGIN_DIR, 'zhongwen-agent.md'), relPath: 'agents/zhongwen-agent.md' },
@@ -37,14 +34,6 @@ const MANAGED_FILES = [
 // ============================================================
 // 辅助函数
 // ============================================================
-
-function logMessage(message) {
-  const timestamp = new Date().toISOString();
-  try {
-    if (!existsSync(dirname(LOG_PATH))) mkdirSync(dirname(LOG_PATH), { recursive: true });
-    writeFileSync(LOG_PATH, `[${timestamp}] ${message}\n`, { flag: 'a' });
-  } catch (e) { /* ignore */ }
-}
 
 function readManifest() {
   if (!existsSync(MANIFEST_PATH)) return { current_version: null, versions: [] };
@@ -232,7 +221,7 @@ function handleRequest(request) {
       sendResponse(id, {
         protocolVersion: '2024-11-05',
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'zhongwen-version-manager', version: '1.0.0' }
+        serverInfo: { name: 'zhongwen-version-manager', version: '4.0.0' }
       });
       break;
 
