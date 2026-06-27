@@ -434,13 +434,10 @@ const sessionState = {
   violations: 0,
   checks: 0,
   startTime: Date.now(),
-  locked: false,
-  lastViolationTime: null,
 };
 
 function recordViolation() {
   sessionState.violations++;
-  sessionState.lastViolationTime = Date.now();
 }
 
 function recordCheck() {
@@ -451,19 +448,24 @@ function getSessionStatus() {
   const now = Date.now();
   const uptime = Math.floor((now - sessionState.startTime) / 1000);
   
-  // 检查是否需要锁定（4次违规后锁定）
-  if (sessionState.violations >= 4) {
-    return {
-      status: 'LOCKED',
-      message: 'z4 次违规，系统已锁定。请联系管理员。',
-      totalChecks: sessionState.checks,
-      totalViolations: sessionState.violations,
-      uptime,
-    };
+  // 根据违规次数确定等级
+  let severity = 'none';
+  let message = '';
+  if (sessionState.violations === 1) {
+    severity = 'light';
+    message = '轻度违规，下次回答需附加简短反省';
+  } else if (sessionState.violations >= 2 && sessionState.violations <= 3) {
+    severity = 'medium';
+    message = '中度违规，下次回答需附加 ≥100 字反省及 3 条改正措施';
+  } else if (sessionState.violations >= 4) {
+    severity = 'heavy';
+    message = '重度违规，下次回答需附加完整改正报告';
   }
   
   return {
-    status: sessionState.violations > 0 ? 'HAS_VIOLATIONS' : 'CLEAN',
+    status: 'ACTIVE',
+    severity,
+    message,
     totalChecks: sessionState.checks,
     totalViolations: sessionState.violations,
     uptime,
@@ -623,7 +625,7 @@ function handleRequest(request) {
                   violations: report.violations,
                   details: report.details,
                   sessionStats: getSessionStatus(),
-                  action: report.status === 'BLOCKED' ? '禁止输出，必须修复后重新检查' : '允许输出',
+                  action: report.status === 'BLOCKED' ? '下次回答必须附加反省与改正' : '允许输出',
                 },
                 null,
                 2
