@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * zhongwen-agent · MCP 语言检查服务器 v4.0.0
+ * zhongwen-agent · MCP 语言检查服务器 v4.4.0
  * 
  * 工程级零信任语言门卫系统。AI 无法绕过、无法控制、无法关闭。
- * 提供实时双向语言纯度检查、自动修复引擎、会话级状态机。
+ * 提供实时双向语言纯度检查、自动修复引擎、会话级状态机、自进化引擎。
  * 
  * 协议：JSON-RPC 2.0 over stdio
  */
 
 import { createInterface } from 'readline';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { spawn } from 'child_process';
 
 // ============================================================
 // 配置与路径
@@ -436,10 +437,20 @@ const sessionState = {
   startTime: Date.now(),
   purityHistory: [], // 纯度历史记录，用于漂移检测
   lastDriftWarning: 0, // 上次漂移警告时间
+  lastEvolutionTime: 0, // 上次自进化时间
 };
 
 function recordViolation() {
   sessionState.violations++;
+  
+  // 自进化引擎：重度违规时自动触发升级（防抖动：10分钟内不重复触发）
+  if (sessionState.violations >= 4) {
+    const now = Date.now();
+    if (now - sessionState.lastEvolutionTime > 600000) { // 10分钟冷却
+      triggerSelfEvolution();
+      sessionState.lastEvolutionTime = now;
+    }
+  }
 }
 
 function recordCheck() {
@@ -453,6 +464,7 @@ function getSessionStatus() {
   // 根据违规次数确定等级
   let severity = 'none';
   let message = '';
+  let evolutionTriggered = false;
   if (sessionState.violations === 1) {
     severity = 'light';
     message = '轻度违规，下次回答需附加简短反省';
@@ -462,6 +474,7 @@ function getSessionStatus() {
   } else if (sessionState.violations >= 4) {
     severity = 'heavy';
     message = '重度违规，下次回答需附加完整改正报告';
+    evolutionTriggered = true;
   }
   
   // 漂移检测：检查最近纯度是否持续下降
@@ -481,6 +494,7 @@ function getSessionStatus() {
     severity,
     message,
     driftWarning,
+    evolutionTriggered,
     totalChecks: sessionState.checks,
     totalViolations: sessionState.violations,
     uptime,
@@ -724,6 +738,41 @@ rl.on('line', (line) => {
     // 不是有效的 JSON，忽略
   }
 });
+
+// ============================================================
+// 自进化引擎（重度违规自动升级）
+// ============================================================
+
+/**
+ * 触发自进化：调用版本管理 MCP 自动升级
+ */
+function triggerSelfEvolution() {
+  try {
+    const manageScript = join(CONFIG_DIR, 'mcp', 'manage.mjs');
+    if (!existsSync(manageScript)) {
+      console.error('[zhongwen-mcp] 自进化引擎：找不到版本管理脚本');
+      return;
+    }
+    
+    // 异步执行升级，不阻塞主流程
+    const child = spawn('node', [manageScript, 'upgrade'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    
+    child.on('error', (err) => {
+      console.error('[zhongwen-mcp] 自进化引擎启动失败:', err.message);
+    });
+    
+    child.on('spawn', () => {
+      console.error('[zhongwen-mcp] 自进化引擎已触发：检测到重度违规，正在自动升级...');
+      child.unref();
+    });
+  } catch (e) {
+    console.error('[zhongwen-mcp] 自进化引擎异常:', e.message);
+  }
+}
 
 // 进程退出处理
 process.on('SIGINT', () => {
