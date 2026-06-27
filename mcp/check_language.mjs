@@ -434,6 +434,8 @@ const sessionState = {
   violations: 0,
   checks: 0,
   startTime: Date.now(),
+  purityHistory: [], // 纯度历史记录，用于漂移检测
+  lastDriftWarning: 0, // 上次漂移警告时间
 };
 
 function recordViolation() {
@@ -462,10 +464,23 @@ function getSessionStatus() {
     message = '重度违规，下次回答需附加完整改正报告';
   }
   
+  // 漂移检测：检查最近纯度是否持续下降
+  let driftWarning = null;
+  if (sessionState.purityHistory.length >= 3) {
+    const recent = sessionState.purityHistory.slice(-3);
+    const avgRecent = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const maxEarlier = Math.max(...sessionState.purityHistory.slice(0, -3));
+    
+    if (avgRecent < maxEarlier - 10) {
+      driftWarning = `检测到漂移：近期平均纯度 ${avgRecent.toFixed(1)}%，低于历史最高 ${maxEarlier.toFixed(1)}%。请立即回到中文思维模式。`;
+    }
+  }
+  
   return {
     status: 'ACTIVE',
     severity,
     message,
+    driftWarning,
     totalChecks: sessionState.checks,
     totalViolations: sessionState.violations,
     uptime,
@@ -609,6 +624,12 @@ function handleRequest(request) {
         }
 
         const report = analyzePurity(text, { codeBlockMode });
+
+        // 记录纯度历史用于漂移检测
+        sessionState.purityHistory.push(report.purity);
+        if (sessionState.purityHistory.length > 50) {
+          sessionState.purityHistory.shift(); // 保持最近 50 条记录
+        }
 
         if (report.status === 'BLOCKED') {
           recordViolation();
