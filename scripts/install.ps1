@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " zhongwen-agent-plugin 安装程序 v4.2.0" -ForegroundColor Cyan
+Write-Host " zhongwen-agent-plugin 安装程序 v4.5.0" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
