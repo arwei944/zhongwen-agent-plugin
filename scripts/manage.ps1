@@ -126,17 +126,38 @@ function Show-Status {
     Write-Host ""
     Write-Host "MCP 服务器状态：" -ForegroundColor Cyan
     $configPath = "$ConfigDir\opencode.json"
-    if (Test-Path -LiteralPath $configPath) {
-        $config = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ($config.mcp.'zhongwen-language-checker') {
-            $mcp = $config.mcp.'zhongwen-language-checker'
-            Write-Host "  名称: zhongwen-language-checker" -ForegroundColor Green
+    $configPathJsonc = "$ConfigDir\opencode.jsonc"
+    $actualConfigPath = if (Test-Path $configPathJsonc) { $configPathJsonc } elseif (Test-Path $configPath) { $configPath } else { $null }
+    
+    if ($actualConfigPath) {
+        $config = Get-Content $actualConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        
+        # 动态检测版本化 MCP 名称
+        $mcpEntry = $config.mcp.PSObject.Properties | Where-Object { $_.Name -like "zhongwen-language-checker*" } | Select-Object -First 1
+        if ($mcpEntry) {
+            $mcp = $mcpEntry.Value
+            Write-Host "  名称: $($mcpEntry.Name)" -ForegroundColor Green
             Write-Host "  类型: $($mcp.type)" -ForegroundColor Green
             Write-Host "  启用: $($mcp.enabled)" -ForegroundColor Green
+            if ($mcp.version) {
+                Write-Host "  版本: $($mcp.version)" -ForegroundColor Green
+            }
         } else {
             Write-Host "  未配置 MCP 服务器" -ForegroundColor Yellow
         }
-        Write-Host "  默认 Agent: $($config.default_agent)" -ForegroundColor Green
+        
+        # 动态检测 Agent 名称
+        $agentName = $config.default_agent
+        Write-Host "  默认 Agent: $agentName" -ForegroundColor Green
+        
+        # 显示版本信息
+        $agentPath = "$ConfigDir\agents\zhongwen-agent.md"
+        if (Test-Path $agentPath) {
+            $agentContent = Get-Content $agentPath -Raw -Encoding UTF8
+            if ($agentContent -match 'version:\s*"([^"]+)"') {
+                Write-Host "  Agent 版本: $($matches[1])" -ForegroundColor Green
+            }
+        }
     }
 
     # 统计信息
@@ -444,6 +465,51 @@ function Invoke-Upgrade {
         }
     }
 
+    # 动态检测新版本号并更新配置
+    Write-Log "正在同步版本化配置..." -Color Cyan
+    $newAgentSource = Join-Path $PluginDir "zhongwen-agent.md"
+    $newVersion = "4.2.0"
+    if (Test-Path $newAgentSource) {
+        $newAgentContent = Get-Content $newAgentSource -Raw -Encoding UTF8
+        if ($newAgentContent -match 'version:\s*"([^"]+)"') {
+            $newVersion = $matches[1]
+        }
+    }
+    $newAgentName = "zhongwen-agent-$newVersion"
+    $newMcpName = "zhongwen-language-checker-$newVersion"
+    
+    $configPathJson = Join-Path $ConfigDir "opencode.json"
+    $configPathJsonc = Join-Path $ConfigDir "opencode.jsonc"
+    $actualConfigPath = if (Test-Path $configPathJsonc) { $configPathJsonc } elseif (Test-Path $configPathJson) { $configPathJson } else { $null }
+    
+    if ($actualConfigPath) {
+        $config = Get-Content $actualConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        
+        # 移除旧版本 MCP 配置
+        $oldMcps = $config.mcp.PSObject.Properties | Where-Object { $_.Name -match "^zhongwen-(language-checker|version-manager)" }
+        foreach ($old in $oldMcps) {
+            $config.mcp.PSObject.Properties.Remove($old.Name)
+        }
+        
+        # 添加新版本 MCP 配置
+        $mcpTarget = Join-Path $ConfigDir "mcp\check_language.mjs"
+        $mcpConfig = @{
+            type = "local"
+            command = @("node", $mcpTarget)
+            enabled = $true
+            version = $newVersion
+        } | ConvertTo-Json
+        $config.mcp | Add-Member -NotePropertyName $newMcpName -NotePropertyValue ($mcpConfig | ConvertFrom-Json) -Force
+        
+        # 更新 agent 名称
+        $config.default_agent = $newAgentName
+        
+        # 保存配置
+        $config | ConvertTo-Json -Depth 20 | Set-Content $actualConfigPath -Encoding UTF8
+        Write-Log "  已更新 MCP 名称: $newMcpName" -Color Green
+        Write-Log "  已更新 Agent 名称: $newAgentName" -Color Green
+    }
+
     # 更新版本号
     $versionName = if ($latestTag) { $latestTag } else { "upgrade-$(Get-Date -Format 'yyyyMMdd-HHmmss')" }
     New-Snapshot -VersionName "$versionName-installed" | Out-Null
@@ -516,7 +582,7 @@ function Show-History {
 # ============================================================
 
 Write-Host "╔════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  zhongwen-agent 版本管理工具 v1.0  ║" -ForegroundColor Cyan
+Write-Host "║  zhongwen-agent 版本管理工具 v4.2  ║" -ForegroundColor Cyan
 Write-Host "╚════════════════════════════════════╝" -ForegroundColor Cyan
 
 switch ($Command) {

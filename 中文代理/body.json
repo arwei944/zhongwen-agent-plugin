@@ -1,0 +1,7 @@
+{
+    "unified_name": "agnes-1.5-flash",
+    "description": "Agnes AI 1.5 Flash",
+    "rules": [{"type": "keyword", "pattern": "agnes-1.5-flash", "case_sensitive": false}],
+    "manual_includes": ["6694b887-3bde-491e-84b5-7e8498147412:agnes-1.5-flash"],
+    "enabled": true
+}

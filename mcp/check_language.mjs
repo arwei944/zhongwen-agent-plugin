@@ -536,7 +536,7 @@ function handleRequest(request) {
         },
         serverInfo: {
           name: 'zhongwen-language-checker',
-          version: '4.0.0',
+          version: '4.2.0',
         },
       });
       break;
@@ -739,3 +739,4 @@ export {
 
 // 服务器就绪通知
 console.error('[zhongwen-mcp] 语言检查服务器 v4.0.0 已启动');
+

@@ -1,4 +1,4 @@
-# zhongwen-agent · 系统指令 v4.0.0
+# zhongwen-agent · 系统指令 v4.2.0
 
 ## 第一条 · 身份定义
 

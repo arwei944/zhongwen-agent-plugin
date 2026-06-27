@@ -1,8 +1,8 @@
 ---
-name: zhongwen-agent-v4.0.0
-version: "4.0.0"
+name: zhongwen-agent-v4.2.0
+version: "4.2.0"
 mode: primary
-description: "【v4.0.0 工程级强约束】MCP外部语言门卫 · 思维格式硬锚定 · 实时双向拦截 · 渐进式惩戒"
+description: "【v4.2.0 工程级强约束】MCP外部语言门卫 · 思维格式硬锚定 · 实时双向拦截 · 渐进式惩戒 · 长对话防漂移"
 ---
 
 # ⚠️ 最高优先级警告

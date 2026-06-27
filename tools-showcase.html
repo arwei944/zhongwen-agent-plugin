@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windows 效率工具 · 实际使用演示</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #0a0a14;
+            color: #e0e0f0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ===== 头部 ===== */
+        .header {
+            background: linear-gradient(135deg, #0d0d1f 0%, #151530 100%);
+            padding: 36px 20px 28px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .header h1 {
+            font-size: 30px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header p {
+            color: #7788aa;
+            margin-top: 6px;
+            font-size: 14px;
+        }
+        .header .hint {
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #4facfe88;
+            background: rgba(79,172,254,0.08);
+            padding: 4px 18px;
+            border-radius: 20px;
+            border: 1px solid rgba(79,172,254,0.12);
+        }
+
+        /* ===== Tab 导航 ===== */
+        .tab-nav-wrap {
+            background: #0f0f22;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .tab-nav {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 10px;
+            gap: 2px;
+            min-width: max-content;
+        }
+        .tab-nav button {
+            flex-shrink: 0;
+            padding: 12px 18px;
+            background: transparent;
+            border: none;
+            color: #6a6a8a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.25s;
+            font-family: inherit;
+            border-radius: 8px 8px 0 0;
+            white-space: nowrap;
+        }
+        .tab-nav button:hover { color: #aaaac8; background: rgba(255,255,255,0.03); }
+        .tab-nav button.active {
+            color: #4facfe;
+            background: rgba(79,172,254,0.07);
+        }
+        .tab-nav button.active::after {
+            content: "";
+            position: absolute;
+            bottom: 0; left: 15%; right: 15%;
+            height: 2px;
+            background: linear-gradient(90deg, #4facfe, #00f2fe);
+            border-radius: 2px 2px 0 0;
+        }
+        .tab-nav button .star { font-size: 10px; color: #ffb347; margin-left: 3px; }
+
+        /* ===== 内容区 ===== */
+        .tab-content-wrap {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 28px 16px 50px;
+        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ===== 场景卡片 ===== */
+        .scene-card {
+            background: linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            padding: 24px 24px 16px;
+            margin-bottom: 20px;
+        }
+        .scene-card h2 {
+            font-size: 20px;
+            color: #d0d0f0;
+            margin-bottom: 4px;
+        }
+        .scene-card .sub {
+            color: #6688aa;
+            font-size: 13px;
+            margin-bottom: 18px;
+        }
+
+        /* ===== 模拟桌面 ===== */
+        .mock-desktop {
+            background: #1a1a30;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 360px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* --- 快捷键提示 --- */
+        .shortcut-hint {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 8px 20px;
+            font-size: 15px;
+            color: #d0d0f0;
+            opacity: 0;
+            transition: opacity 0.4s;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+        .shortcut-hint .keycap {
+            display: inline-block;
+            background: #2a2a48;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 5px;
+            padding: 2px 10px;
+            font-size: 13px;
+            color: #fff;
+            box-shadow: 0 2px 0 #0a0a1a;
+        }
+        .shortcut-hint.show { opacity: 1; }
+        .shortcut-hint .press { color: #4facfe; animation: pulse-key 0.6s ease infinite; }
+
+        @keyframes pulse-key {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        /* --- 搜索框 --- */
+        .mock-search {
+            width: 85%;
+            max-width: 460px;
+            background: #222244;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            opacity: 0;
+            transform: translateY(-10px) scale(0.96);
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+        }
+        .mock-search.show {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        .mock-search .icon {
+            font-size: 18px;
+            color: #4facfe;
+            flex-shrink: 0;
+        }
+        .mock-search .input-area {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+        .mock-search .typed-text {
+            color: #fff;
+            font-size: 16px;
+            letter-spacing: 0.5px;
+            min-height: 24px;
+        }
+        .mock-search .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 18px;
+            background: #4facfe;
+            margin-left: 2px;
+            animation: blink 0.8s step-end infinite;
+            vertical-align: text-bottom;
+        }
+        .mock-search .cursor.static { animation: none; background: transparent; }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* --- 结果列表 --- */
+        .mock-results {
+            width: 85%;
+            max-width: 460px;
+            margin-top: 8px;
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+        .mock-results.show { opacity: 1; }
+
+        .mock-result-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            margin-bottom: 4px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid transparent;
+            transition: all 0.3s;
+            opacity: 0;
+            transform: translateX(-8px);
+        }
+        .mock-result-item.appear {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .mock-result-item .r-icon {
+            font-size: 22px;
+            width: 32px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .mock-result-item .r-name {
+            font-size: 14px;
+            color: #d0d0f0;
+            flex: 1;
+        }
+        .mock-result-item .r-path {
+            font-size: 11px;
+            color: #556688;
+        }
+        .mock-result-item.selected {
+            background: rgba(79,172,254,0.12);
+            border-color: rgba(79,172,254,0.25);
+        }
+        .mock-result-item.selected .r-name { color: #4facfe; }
+
+        /* --- 完成反馈 --- */
+        .done-feedback {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,242,195,0.1);
+            border: 1px solid rgba(0,242,195,0.2);
+            border-radius: 10px;
+            padding: 10px 24px;
+            opacity: 0;
+            transition: all 0.5s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            white-space: nowrap;
+        }
+        .done-feedback.show { opacity: 1; }
+        .done-feedback .check { color: #00f2be; font-size: 18px; }
+        .done-feedback .text { color: #a0e0d0; font-size: 14px; }
+
+        /* --- 重新播放按钮 --- */
+        .replay-btn {
+            margin-top: 16px;
+            background: rgba(79,172,254,0.08);
+            border: 1px solid rgba(79,172,254,0.15);
+            color: #4facfe;
+            padding: 8px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+            transition: all 0.25s;
+        }
+        .replay-btn:hover {
+            background: rgba(79,172,254,0.16);
+            border-color: rgba(79,172,254,0.3);
+        }
+
+        /* ===== 使用总结 ===== */
+        .summary-box {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 18px 22px;
+            margin-top: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 24px;
+        }
+        .summary-box .item {
+            font-size: 13px;
+            color: #8899bb;
+        }
+        .summary-box .item strong {
+            color: #c0d0e8;
+            font-weight: 500;
+        }
+        .summary-box .verdict {
+            width: 100%;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            color: #aabbcc;
+            font-size: 14px;
+        }
+        .summary-box .verdict strong {
+            color: #4facfe;
+        }
+
+        /* ===== 场景描述 ===== */
+        .scene-desc {
+            text-align: center;
+            color: #667788;
+            font-size: 13px;
+            margin-top: 6px;
+            min-height: 20px;
+        }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 640px) {
+            .header h1 { font-size: 22px; }
+            .mock-desktop { min-height: 300px; padding: 14px; }
+            .mock-search { width: 95%; padding: 10px 14px; }
+            .mock-results { width: 95%; }
+            .mock-search .typed-text { font-size: 14px; }
+            .tab-nav button { padding: 10px 12px; font-size: 12px; }
+            .shortcut-hint { font-size: 13px; padding: 6px 14px; }
+        }
+
+        .tab-nav-wrap::-webkit-scrollbar { height: 3px; }
+        .tab-nav-wrap::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        .tab-nav-wrap::-webkit-scrollbar-track { background: transparent; }
+
+        .footer {
+            text-align: center;
+            padding: 24px;
+            color: #444;
+            font-size: 12px;
+            border-top: 1px solid rgba(255,255,255,0.03);
+        }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <h1>🎬 实际使用演示</h1>
+    <p>每款工具都模拟了一次完整操作过程，看看它们用起来到底是什么样子</p>
+    <span class="hint">▶ 切换到对应 Tab 即可观看动画演示 · 动画自动循环播放</span>
+</header>
+
+<div class="tab-nav-wrap">
+    <nav class="tab-nav" id="tabNav">
+        <button class="active" data-tab="wox">Wox <span class="star">★27k</span></button>
+        <button data-tab="flow">Flow Launcher <span class="star">★15k</span></button>
+        <button data-tab="cerebro">Cerebro <span class="star">★8.5k</span></button>
+        <button data-tab="ueli">Ueli <span class="star">★4.5k</span></button>
+        <button data-tab="keypirinha">Keypirinha <span class="star">★1.1k</span></button>
+        <button data-tab="zerolaunch">ZeroLaunch <span class="star">★542</span></button>
+        <button data-tab="look">Look <span class="star">★347</span></button>
+        <button data-tab="pinpoint">Pinpoint <span class="star">★160</span></button>
+        <button data-tab="altrun">ALTRun <span class="star">★144</span></button>
+        <button data-tab="docfetcher">DocFetcher</button>
+        <button data-tab="localsynapse">LocalSynapse</button>
+    </nav>
+</div>
+
+<div class="tab-content-wrap" id="tabContent">
+
+    <!-- ============================== Wox ============================== -->
+    <div class="tab-panel active" id="panel-wox">
+        <div class="scene-card">
+            <h2>🔍 Wox — 搜索应用并启动</h2>
+            <div class="sub">跨平台启动器 · 快捷键 Alt+Space</div>
+            <div class="mock-desktop" id="demo-wox">
+                <div class="shortcut-hint" id="hint-wox">
+                    <span>按下</span>
+                    <span class="keycap press">Alt</span>
+                    <span>+</span>
+                    <span class="keycap press">Space</span>
+                    <span>打开搜索</span>
+                </div>
+                <div class="mock-search" id="search-wox">
+                    <span class="icon">🔍</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-wox"></span>
+                        <span class="cursor" id="cursor-wox"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-wox">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">🧮</span><span class="r-name">计算器</span><span class="r-path">系统工具</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">📄</span><span class="r-name">计算器.docx</span><span class="r-path">D:\文档\</span></div>
+                    <div class="mock-result-item" data-idx="2"><span class="r-icon">🌐</span><span class="r-name">在线计算器 — 搜索</span><span class="r-path">网络搜索</span></div>
+                </div>
+                <div class="done-feedback" id="done-wox">
+                    <span class="check">✓</span>
+                    <span class="text">正在打开「计算器」...</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-wox">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('wox')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>跨平台 · 插件丰富</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡⚡</span>
+            <span class="item"><strong>学习成本：</strong>低</span>
+            <div class="verdict"><strong>一句话：</strong>如果你想找一个全平台都能用、插件多的启动器，Wox 是稳妥之选</div>
+        </div>
+    </div>
+
+    <!-- ============================== Flow Launcher ============================== -->
+    <div class="tab-panel" id="panel-flow">
+        <div class="scene-card">
+            <h2>🔍 Flow Launcher — Everything 引擎搜索文件</h2>
+            <div class="sub">Windows 专属 · 支持拼音搜索 · 预览面板</div>
+            <div class="mock-desktop" id="demo-flow">
+                <div class="shortcut-hint" id="hint-flow">
+                    <span>按下</span>
+                    <span class="keycap press">Alt</span>
+                    <span>+</span>
+                    <span class="keycap press">Space</span>
+                </span>
+                </div>
+                <div class="mock-search" id="search-flow">
+                    <span class="icon">🔍</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-flow"></span>
+                        <span class="cursor" id="cursor-flow"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-flow">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">📁</span><span class="r-name">项目报告_2024_v3.pdf</span><span class="r-path">D:\工作\项目\</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">📁</span><span class="r-name">项目预算.xlsx</span><span class="r-path">D:\工作\财务\</span></div>
+                    <div class="mock-result-item" data-idx="2"><span class="r-icon">📁</span><span class="r-name">项目管理规范.docx</span><span class="r-path">D:\工作\模板\</span></div>
+                </div>
+                <div class="done-feedback" id="done-flow">
+                    <span class="check">✓</span>
+                    <span class="text">已找到文件，按 Enter 打开 + 预览面板已显示</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-flow">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('flow')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>Windows 深度用户 · 文件搜索频繁</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡⚡⚡（Everything 加持）</span>
+            <span class="item"><strong>学习成本：</strong>低</span>
+            <div class="verdict"><strong>一句话：</strong>Windows 上最推荐的开源启动器，文件搜索秒级响应，插件生态丰富</div>
+        </div>
+    </div>
+
+    <!-- ============================== Cerebro ============================== -->
+    <div class="tab-panel" id="panel-cerebro">
+        <div class="scene-card">
+            <h2>🔍 Cerebro — 网络搜索与单位换算</h2>
+            <div class="sub">Electron 跨平台 · Vim 风格快捷键</div>
+            <div class="mock-desktop" id="demo-cerebro">
+                <div class="shortcut-hint" id="hint-cerebro">
+                    <span>按下</span>
+                    <span class="keycap press">Ctrl</span>
+                    <span>+</span>
+                    <span class="keycap press">Space</span>
+                </div>
+                <div class="mock-search" id="search-cerebro">
+                    <span class="icon">🔍</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-cerebro"></span>
+                        <span class="cursor" id="cursor-cerebro"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-cerebro">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">🌐</span><span class="r-name">15 USD 兑换 CNY → 108.45 人民币</span><span class="r-path">智能转换</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">🌐</span><span class="r-name">15 dollars to yuan — Google 搜索</span><span class="r-path">网络搜索</span></div>
+                </div>
+                <div class="done-feedback" id="done-cerebro">
+                    <span class="check">✓</span>
+                    <span class="text">15 美元 ≈ 108.45 元，结果已复制到剪贴板</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-cerebro">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('cerebro')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>跨平台 · 喜欢 Vim 操作</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡</span>
+            <span class="item"><strong>学习成本：</strong>低</span>
+            <div class="verdict"><strong>一句话：</strong>界面漂亮、操作优雅，适合对颜值有要求的用户，但更新较慢</div>
+        </div>
+    </div>
+
+    <!-- ============================== Ueli ============================== -->
+    <div class="tab-panel" id="panel-ueli">
+        <div class="scene-card">
+            <h2>🔍 Ueli — 搜索文件 + 翻译一句话</h2>
+            <div class="sub">Electron 跨平台 · Microsoft Store 可安装</div>
+            <div class="mock-desktop" id="demo-ueli">
+                <div class="shortcut-hint" id="hint-ueli">
+                    <span>按下</span>
+                    <span class="keycap press">Alt</span>
+                    <span>+</span>
+                    <span class="keycap press">Space</span>
+                </div>
+                <div class="mock-search" id="search-ueli">
+                    <span class="icon">🔍</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-ueli"></span>
+                        <span class="cursor" id="cursor-ueli"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-ueli">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">🌐</span><span class="r-name">你好世界 → Hello World（DeepL 翻译）</span><span class="r-path">翻译扩展</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">📁</span><span class="r-name">hello.py</span><span class="r-path">D:\code\</span></div>
+                </div>
+                <div class="done-feedback" id="done-ueli">
+                    <span class="check">✓</span>
+                    <span class="text">翻译结果已复制 · 按 Enter 打开详情</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-ueli">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('ueli')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>跨平台 · 常用翻译功能</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡</span>
+            <span class="item"><strong>学习成本：</strong>低</span>
+            <div class="verdict"><strong>一句话：</strong>开箱即用，内置翻译和货币换算很实用，适合不想折腾配置的用户</div>
+        </div>
+    </div>
+
+    <!-- ============================== Keypirinha ============================== -->
+    <div class="tab-panel" id="panel-keypirinha">
+        <div class="scene-card">
+            <h2>🔍 Keypirinha — 极速启动应用</h2>
+            <div class="sub">C++ 原生 · 极致轻量 · Windows 专属</div>
+            <div class="mock-desktop" id="demo-keypirinha">
+                <div class="shortcut-hint" id="hint-keypirinha">
+                    <span>按下</span>
+                    <span class="keycap press">Alt</span>
+                    <span>+</span>
+                    <span class="keycap press">Space</span>
+                </div>
+                <div class="mock-search" id="search-keypirinha">
+                    <span class="icon">⚡</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-keypirinha"></span>
+                        <span class="cursor" id="cursor-keypirinha"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-keypirinha">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">🖥️</span><span class="r-name">Visual Studio Code</span><span class="r-path">应用程序</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">🖥️</span><span class="r-name">Visual Studio 2022</span><span class="r-path">应用程序</span></div>
+                </div>
+                <div class="done-feedback" id="done-keypirinha">
+                    <span class="check">✓</span>
+                    <span class="text">已启动 Visual Studio Code（从按下到打开不到 0.3 秒）</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-keypirinha">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('keypirinha')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>追求极致速度和低资源占用</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡⚡⚡</span>
+            <span class="item"><strong>学习成本：</strong>低</span>
+            <div class="verdict"><strong>一句话：</strong>如果你只要"快"和"轻"，不要花哨功能，Keypirinha 是最佳选择</div>
+        </div>
+    </div>
+
+    <!-- ============================== ZeroLaunch ============================== -->
+    <div class="tab-panel" id="panel-zerolaunch">
+        <div class="scene-card">
+            <h2>🔍 ZeroLaunch — 拼音首字母搜到文件</h2>
+            <div class="sub">Rust 编写 · 拼音模糊搜索 · AI 语义搜索可选</div>
+            <div class="mock-desktop" id="demo-zerolaunch">
+                <div class="shortcut-hint" id="hint-zerolaunch">
+                    <span>按下</span>
+                    <span class="keycap press">Alt</span>
+                    <span>+</span>
+                    <span class="keycap press">Space</span>
+                </div>
+                <div class="mock-search" id="search-zerolaunch">
+                    <span class="icon">⚡</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-zerolaunch"></span>
+                        <span class="cursor" id="cursor-zerolaunch"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-zerolaunch">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">🎵</span><span class="r-name">网易云音乐</span><span class="r-path">拼音匹配: wangyiyun → wy</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">📄</span><span class="r-name">王经理_报价单.xlsx</span><span class="r-path">拼音匹配: wang → w</span></div>
+                </div>
+                <div class="done-feedback" id="done-zerolaunch">
+                    <span class="check">✓</span>
+                    <span class="text">已打开「网易云音乐」— 只输了 2 个字母 wy</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-zerolaunch">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('zerolaunch')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>中文用户 · 快速启动</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡⚡⚡</span>
+            <span class="item"><strong>学习成本：</strong>极低</span>
+            <div class="verdict"><strong>一句话：</strong>拼音首字母搜索是中文用户福音，输两个字母就能找到应用，Rust 速度极快</div>
+        </div>
+    </div>
+
+    <!-- ============================== Look ============================== -->
+    <div class="tab-panel" id="panel-look">
+        <div class="scene-card">
+            <h2>🔍 Look — 轻量跨平台搜索</h2>
+            <div class="sub">Rust + Swift · Spotlight / Raycast 轻量替代</div>
+            <div class="mock-desktop" id="demo-look">
+                <div class="shortcut-hint" id="hint-look">
+                    <span>按下</span>
+                    <span class="keycap press">Alt</span>
+                    <span>+</span>
+                    <span class="keycap press">Space</span>
+                </div>
+                <div class="mock-search" id="search-look">
+                    <span class="icon">🔍</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-look"></span>
+                        <span class="cursor" id="cursor-look"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-look">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">📁</span><span class="r-name">照片_2024_旅行</span><span class="r-path">D:\图片\</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">🖥️</span><span class="r-name">照片查看器</span><span class="r-path">应用程序</span></div>
+                </div>
+                <div class="done-feedback" id="done-look">
+                    <span class="check">✓</span>
+                    <span class="text">已打开文件夹「照片_2024_旅行」</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-look">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('look')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>跨平台 · 喜欢清爽简洁</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡⚡</span>
+            <span class="item"><strong>学习成本：</strong>低</span>
+            <div class="verdict"><strong>一句话：</strong>如果你觉得 Wox / Flow 太重，想要一个刚好够用的轻量启动器，Look 值得关注</div>
+        </div>
+    </div>
+
+    <!-- ============================== Pinpoint ============================== -->
+    <div class="tab-panel" id="panel-pinpoint">
+        <div class="scene-card">
+            <h2>🔍 Pinpoint — 搜索 + 剪贴板二合一</h2>
+            <div class="sub">C# WPF · 启动器 + 剪贴板管理器</div>
+            <div class="mock-desktop" id="demo-pinpoint">
+                <div class="shortcut-hint" id="hint-pinpoint">
+                    <span>按下</span>
+                    <span class="keycap press">Alt</span>
+                    <span>+</span>
+                    <span class="keycap press">Space</span>
+                    <span style="color:#667;margin:0 4px;">|</span>
+                    <span class="keycap press">Ctrl</span>
+                    <span>+</span>
+                    <span class="keycap press">Shift</span>
+                    <span>+</span>
+                    <span class="keycap press">V</span>
+                    <span>打开剪贴板</span>
+                </div>
+                <div class="mock-search" id="search-pinpoint">
+                    <span class="icon">📋</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-pinpoint"></span>
+                        <span class="cursor" id="cursor-pinpoint"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-pinpoint">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">📋</span><span class="r-name">【剪贴板】项目需求_v3.md — 2024-12-01 14:30</span><span class="r-path">剪贴板历史</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">📋</span><span class="r-name">【剪贴板】API 接口文档.txt — 2024-12-01 11:20</span><span class="r-path">剪贴板历史</span></div>
+                    <div class="mock-result-item" data-idx="2"><span class="r-icon">📁</span><span class="r-name">项目需求_v3.md</span><span class="r-path">D:\工作\文档\</span></div>
+                </div>
+                <div class="done-feedback" id="done-pinpoint">
+                    <span class="check">✓</span>
+                    <span class="text">已粘贴「项目需求_v3.md」内容</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-pinpoint">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('pinpoint')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>需要剪贴板管理 + 启动器合一</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡</span>
+            <span class="item"><strong>学习成本：</strong>中</span>
+            <div class="verdict"><strong>一句话：</strong>启动器和剪贴板管理合二为一，少装一个软件，适合追求整合的用户</div>
+        </div>
+    </div>
+
+    <!-- ============================== ALTRun ============================== -->
+    <div class="tab-panel" id="panel-altrun">
+        <div class="scene-card">
+            <h2>🔍 ALTRun — 极致简单：输入即开</h2>
+            <div class="sub">AutoHotkey · 几百 KB · 中文界面</div>
+            <div class="mock-desktop" id="demo-altrun">
+                <div class="shortcut-hint" id="hint-altrun">
+                    <span>按下</span>
+                    <span class="keycap press">Alt</span>
+                    <span>+</span>
+                    <span class="keycap press">R</span>
+                    <span>（ALTRun 默认快捷键）</span>
+                </div>
+                <div class="mock-search" id="search-altrun">
+                    <span class="icon">🚀</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-altrun"></span>
+                        <span class="cursor" id="cursor-altrun"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-altrun">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">🖥️</span><span class="r-name">Chrome 浏览器</span><span class="r-path">已配置的快速启动项</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">🖥️</span><span class="r-name">微信</span><span class="r-path">已配置的快速启动项</span></div>
+                </div>
+                <div class="done-feedback" id="done-altrun">
+                    <span class="check">✓</span>
+                    <span class="text">Chrome 浏览器已启动</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-altrun">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('altrun')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>只需要快速启动 · 追求极简</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡⚡</span>
+            <span class="item"><strong>学习成本：</strong>极低</span>
+            <div class="verdict"><strong>一句话：</strong>几百 KB，绿色免安装，输入即开，适合只需要"启动应用"这一个功能的用户</div>
+        </div>
+    </div>
+
+    <!-- ============================== DocFetcher ============================== -->
+    <div class="tab-panel" id="panel-docfetcher">
+        <div class="scene-card">
+            <h2>🔍 DocFetcher — 全文搜索文档内容</h2>
+            <div class="sub">Java 桌面全文搜索引擎 · PDF/Word/Excel 都能搜</div>
+            <div class="mock-desktop" id="demo-docfetcher">
+                <div class="shortcut-hint" id="hint-docfetcher" style="position:relative;top:0;transform:none;margin-bottom:12px;">
+                    <span>打开 DocFetcher → 选择索引文件夹 → 输入关键词搜索</span>
+                </div>
+                <div class="mock-search" id="search-docfetcher">
+                    <span class="icon">📄</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-docfetcher"></span>
+                        <span class="cursor" id="cursor-docfetcher"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-docfetcher">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">📄</span><span class="r-name">2024年度总结报告.pdf</span><span class="r-path">匹配：...完成了**年度**目标，营收增长 15%...</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">📄</span><span class="r-name">员工年度考核表.xlsx</span><span class="r-path">匹配：Sheet2 — **年度**考核评分汇总</span></div>
+                    <div class="mock-result-item" data-idx="2"><span class="r-icon">📄</span><span class="r-name">年度计划草稿.docx</span><span class="r-path">匹配：第一章 **年度**总体目标</span></div>
+                </div>
+                <div class="done-feedback" id="done-docfetcher">
+                    <span class="check">✓</span>
+                    <span class="text">已找到 3 个包含"年度"的文档 · 双击打开结果</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-docfetcher">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('docfetcher')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>经常搜索文档内容 · 知识工作者</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡⚡（索引后快）</span>
+            <span class="item"><strong>学习成本：</strong>中</span>
+            <div class="verdict"><strong>一句话：</strong>唯一能搜文档内部文字的开源工具，PDF/Word/Excel 一把抓，知识管理必备</div>
+        </div>
+    </div>
+
+    <!-- ============================== LocalSynapse ============================== -->
+    <div class="tab-panel" id="panel-localsynapse">
+        <div class="scene-card">
+            <h2>🔍 LocalSynapse — 用大白话搜文件</h2>
+            <div class="sub">AI 语义搜索 · 说人话就能找到 · 完全离线</div>
+            <div class="mock-desktop" id="demo-localsynapse">
+                <div class="shortcut-hint" id="hint-localsynapse" style="position:relative;top:0;transform:none;margin-bottom:12px;">
+                    <span>打开 LocalSynapse → AI 自动索引 → 用自然语言搜索</span>
+                </div>
+                <div class="mock-search" id="search-localsynapse">
+                    <span class="icon">🧠</span>
+                    <div class="input-area">
+                        <span class="typed-text" id="input-localsynapse"></span>
+                        <span class="cursor" id="cursor-localsynapse"></span>
+                    </div>
+                </div>
+                <div class="mock-results" id="results-localsynapse">
+                    <div class="mock-result-item" data-idx="0"><span class="r-icon">📁</span><span class="r-name">2024年财务预算表.xlsx</span><span class="r-path">AI 认为匹配：涉及预算和财务</span></div>
+                    <div class="mock-result-item" data-idx="1"><span class="r-icon">📁</span><span class="r-name">部门支出汇总.pdf</span><span class="r-path">AI 认为匹配：包含支出和费用</span></div>
+                    <div class="mock-result-item" data-idx="2"><span class="r-icon">📁</span><span class="r-name">供应商合同_2024.docx</span><span class="r-path">AI 认为匹配：提到预算条款</span></div>
+                </div>
+                <div class="done-feedback" id="done-localsynapse">
+                    <span class="check">✓</span>
+                    <span class="text">AI 已按语义找到相关文件，且完全离线</span>
+                </div>
+            </div>
+            <div class="scene-desc" id="desc-localsynapse">等待启动...</div>
+            <button class="replay-btn" onclick="restartDemo('localsynapse')">⟳ 重新播放</button>
+        </div>
+        <div class="summary-box">
+            <span class="item"><strong>适合场景：</strong>想用 AI 搜索 · 隐私敏感</span>
+            <span class="item"><strong>搜索速度：</strong>⚡⚡（需 AI 处理）</span>
+            <span class="item"><strong>学习成本：</strong>低</span>
+            <div class="verdict"><strong>一句话：</strong>说"去年的财务报表"就能找到文件，AI 理解含义而非文件名，是未来方向（目前还比较早期）</div>
+        </div>
+    </div>
+
+</div>
+
+<footer class="footer">
+    使用场景为模拟演示 · 实际体验以各工具最新版本为准
+</footer>
+
+<script>
+// ===== 场景数据 =====
+const demos = {
+    wox: {
+        keyword: '计算器',
+        stepDelays: [600, 300, 180, 200, 200, 500],
+        resultCount: 3,
+        doneText: '正在打开「计算器」...'
+    },
+    flow: {
+        keyword: '项目',
+        stepDelays: [600, 300, 120, 150, 150, 500],
+        resultCount: 3,
+        doneText: '已找到文件，按 Enter 打开 + 预览面板已显示'
+    },
+    cerebro: {
+        keyword: '15 usd',
+        stepDelays: [600, 300, 100, 150, 150, 500],
+        resultCount: 2,
+        doneText: '15 美元 ≈ 108.45 元，结果已复制到剪贴板'
+    },
+    ueli: {
+        keyword: '你好世界',
+        stepDelays: [600, 300, 150, 150, 150, 500],
+        resultCount: 2,
+        doneText: '翻译结果已复制 · 按 Enter 打开详情'
+    },
+    keypirinha: {
+        keyword: 'vscode',
+        stepDelays: [600, 250, 100, 120, 120, 400],
+        resultCount: 2,
+        doneText: '已启动 Visual Studio Code（从按下到打开不到 0.3 秒）'
+    },
+    zerolaunch: {
+        keyword: 'wy',
+        stepDelays: [600, 250, 80, 120, 120, 400],
+        resultCount: 2,
+        doneText: '已打开「网易云音乐」— 只输了 2 个字母 wy'
+    },
+    look: {
+        keyword: '照片',
+        stepDelays: [600, 300, 120, 150, 150, 500],
+        resultCount: 2,
+        doneText: '已打开文件夹「照片_2024_旅行」'
+    },
+    pinpoint: {
+        keyword: '项目',
+        stepDelays: [600, 300, 120, 150, 150, 600],
+        resultCount: 3,
+        doneText: '已粘贴「项目需求_v3.md」内容'
+    },
+    altrun: {
+        keyword: 'chrome',
+        stepDelays: [600, 300, 120, 120, 120, 400],
+        resultCount: 2,
+        doneText: 'Chrome 浏览器已启动'
+    },
+    docfetcher: {
+        keyword: '年度',
+        stepDelays: [500, 200, 150, 150, 150, 600],
+        resultCount: 3,
+        doneText: '已找到 3 个包含"年度"的文档 · 双击打开结果'
+    },
+    localsynapse: {
+        keyword: '去年花了多少钱',
+        stepDelays: [500, 200, 200, 200, 200, 700],
+        resultCount: 3,
+        doneText: 'AI 已按语义找到相关文件，且完全离线'
+    }
+};
+
+let timers = {};
+
+function clearTimers(name) {
+    if (timers[name]) {
+        timers[name].forEach(t => clearTimeout(t));
+        timers[name] = [];
+    }
+}
+
+function restartDemo(name) {
+    // 重置所有元素
+    const hint = document.getElementById('hint-' + name);
+    const search = document.getElementById('search-' + name);
+    const input = document.getElementById('input-' + name);
+    const cursor = document.getElementById('cursor-' + name);
+    const results = document.getElementById('results-' + name);
+    const done = document.getElementById('done-' + name);
+    const desc = document.getElementById('desc-' + name);
+
+    if (!hint) return;
+
+    // 清除旧定时器
+    clearTimers(name);
+    timers[name] = [];
+
+    // 重置状态
+    hint.classList.remove('show');
+    search.classList.remove('show');
+    results.classList.remove('show');
+    done.classList.remove('show');
+    input.textContent = '';
+    cursor.className = 'cursor';
+    desc.textContent = '等待启动...';
+
+    // 重置所有结果项
+    const items = results.querySelectorAll('.mock-result-item');
+    items.forEach((el, i) => {
+        el.classList.remove('appear', 'selected');
+        el.style.transitionDelay = '0s';
+    });
+
+    const data = demos[name];
+    if (!data) return;
+
+    const td = (delay) => new Promise(r => {
+        const t = setTimeout(r, delay);
+        timers[name].push(t);
+    });
+
+    // 启动动画链
+    (async () => {
+        await td(data.stepDelays[0]);
+        hint.classList.add('show');
+        desc.textContent = '⌨ 按下快捷键呼出搜索框...';
+        await td(data.stepDelays[1]);
+        search.classList.add('show');
+        desc.textContent = '✍ 正在输入关键词...';
+
+        // 打字效果
+        const chars = data.keyword.split('');
+        for (let i = 0; i < chars.length; i++) {
+            await td(data.stepDelays[2]);
+            input.textContent += chars[i];
+        }
+        cursor.className = 'cursor static';
+        desc.textContent = '🔍 正在搜索...';
+
+        await td(data.stepDelays[3]);
+        results.classList.add('show');
+        desc.textContent = '📋 显示搜索结果...';
+
+        // 逐个显示结果
+        for (let i = 0; i < data.resultCount && i < items.length; i++) {
+            await td(data.stepDelays[4]);
+            items[i].classList.add('appear');
+        }
+
+        // 高亮第一个结果
+        await td(300);
+        if (items[0]) {
+            items[0].classList.add('selected');
+        }
+        desc.textContent = '✅ 选中最佳结果...';
+
+        await td(data.stepDelays[5]);
+        done.classList.add('show');
+        desc.textContent = data.doneText || '已完成';
+
+        // 自动重新播放
+        await td(2500);
+        restartDemo(name);
+    })();
+}
+
+// ===== Tab 切换 =====
+const tabs = document.querySelectorAll('.tab-nav button');
+tabs.forEach(btn => {
+    btn.addEventListener('click', function() {
+        const tabId = this.dataset.tab;
+        // 切换按钮状态
+        tabs.forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        // 切换面板
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        const panel = document.getElementById('panel-' + tabId);
+        if (panel) panel.classList.add('active');
+        // 清除所有正在运行的动画
+        Object.keys(demos).forEach(k => clearTimers(k));
+        // 启动当前 tab 的动画
+        setTimeout(() => restartDemo(tabId), 100);
+        // 滚动导航
+        this.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    });
+});
+
+// ===== 初始启动第一个 =====
+window.addEventListener('load', () => {
+    setTimeout(() => restartDemo('wox'), 300);
+});
+</script>
+
+</body>
+</html>

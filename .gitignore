@@ -1,0 +1,7 @@
+
+# 防止临时用户目录内容被索引
+%USERPROFILE%/
+
+# 本地配置文件（含 API 密钥）
+opencode.json
+

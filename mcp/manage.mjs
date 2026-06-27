@@ -221,7 +221,7 @@ function handleRequest(request) {
       sendResponse(id, {
         protocolVersion: '2024-11-05',
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'zhongwen-version-manager', version: '4.0.0' }
+        serverInfo: { name: 'zhongwen-version-manager', version: '4.2.0' }
       });
       break;
 
@@ -503,3 +503,4 @@ process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
 logMessage('版本管理 MCP 服务器已启动');
+
