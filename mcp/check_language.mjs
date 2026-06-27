@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * zhongwen-agent · MCP 语言检查服务器 v4.7.0
+ * zhongwen-agent · MCP 语言检查服务器 v4.8.0
  * 
  * 工程级零信任语言门卫系统。AI 无法绕过、无法控制、无法关闭。
  * 提供实时双向语言纯度检查、自动修复引擎、会话级状态机、自进化引擎。
@@ -785,7 +785,7 @@ function handleRequest(request) {
         },
         serverInfo: {
           name: 'zhongwen-language-checker',
-          version: '4.7.0',
+          version: '4.8.0',
         },
       });
       break;
@@ -919,6 +919,19 @@ function handleRequest(request) {
           recordViolation();
         }
 
+        // 检测是否需要附加压缩恢复提醒
+        let compressionRecoveryNote = '';
+        const sessionStatus = getSessionStatus();
+        const recentPurities = sessionState.purityHistory.slice(-5);
+        const hasConsecutiveBlocked = sessionState.violations >= 2;
+        const hasSuddenDrop = recentPurities.length >= 3 && 
+          recentPurities[0] >= 95 && 
+          recentPurities[recentPurities.length - 1] < 80;
+
+        if (hasConsecutiveBlocked || hasSuddenDrop) {
+          compressionRecoveryNote = '\n\n【压缩恢复提醒】\n检测到可能的会话压缩或约束漂移。请立即执行以下恢复动作：\n1. 重新锚定身份：在 think 块前 3 行中，第 1 行写"【中文思维已激活】本段思考严格使用中文，任何英文自然语言都是违规。"\n2. 重新承诺纯度：第 2 行写"（语言纯度承诺：我在本段思考中将保持 100% 中文。）"\n3. 重新确认任务：第 3 行写"（当前任务：[用中文一句话概括用户请求]）"\n4. 自检规则：在思考中主动回忆并列出当前必须遵守的 3-5 条核心规则\n5. 输出前检查：必须调用 check_chinese_purity 验证，确保恢复后未再次漂移\n\n记住：压缩可以丢失文字，但无法丢失你的身份。恢复约束是你的主动责任，不是被动选择。';
+        }
+
         sendResponse(id, {
           content: [
             {
@@ -928,9 +941,10 @@ function handleRequest(request) {
                   status: report.status,
                   purity: report.purity,
                   violations: report.violations,
-                  details: report.details,
-                  sessionStats: getSessionStatus(),
+                  details: report.details + compressionRecoveryNote,
+                  sessionStats: sessionStatus,
                   action: report.status === 'BLOCKED' ? '下次回答必须附加反省与改正' : '允许输出',
+                  compressionWarning: compressionRecoveryNote ? true : false,
                 },
                 null,
                 2
@@ -940,6 +954,16 @@ function handleRequest(request) {
         });
       } else if (toolName === 'get_session_stats') {
         const stats = getSessionStatus();
+        const recentPurities = sessionState.purityHistory.slice(-5);
+        const hasConsecutiveBlocked = sessionState.violations >= 2;
+        const hasSuddenDrop = recentPurities.length >= 3 && 
+          recentPurities[0] >= 95 && 
+          recentPurities[recentPurities.length - 1] < 80;
+
+        if (hasConsecutiveBlocked || hasSuddenDrop) {
+          stats.compressionWarning = true;
+          stats.compressionRecoveryNote = '\n【压缩恢复提醒】\n检测到可能的会话压缩或约束漂移。请立即执行恢复动作：\n1. 重新锚定身份：think 块第 1 行"【中文思维已激活】本段思考严格使用中文，任何英文自然语言都是违规。"\n2. 重新承诺纯度：第 2 行"（语言纯度承诺：我在本段思考中将保持 100% 中文。）"\n3. 重新确认任务：第 3 行"（当前任务：[用中文一句话概括用户请求]）"\n4. 自检规则：回忆并列出当前必须遵守的 3-5 条核心规则\n5. 输出前检查：必须调用 check_chinese_purity 验证\n\n记住：压缩可以丢失文字，但无法丢失你的身份。恢复约束是你的主动责任，不是被动选择。';
+        }
         
         sendResponse(id, {
           content: [
