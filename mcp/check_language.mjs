@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * zhongwen-agent · MCP 语言检查服务器 v4.5.0
+ * zhongwen-agent · MCP 语言检查服务器 v4.7.0
  * 
  * 工程级零信任语言门卫系统。AI 无法绕过、无法控制、无法关闭。
  * 提供实时双向语言纯度检查、自动修复引擎、会话级状态机、自进化引擎。
@@ -478,6 +478,16 @@ function isCommentLine(line) {
  * @param {object} report - 纯度分析报告对象
  */
 function checkEnglishInText(text, lineNumber, report) {
+  // 跳过 think 块的标准中文锚定文本
+  const trimmed = text.trim();
+  if (/^【.*?】/.test(trimmed) && /[\u4e00-\u9fff]/.test(trimmed)) {
+    const anchorKeywords = ['中文思维已激活', '思维锚定激活', '语言纯度承诺', '当前任务', '检查承诺', '禁止声明', '纯度承诺'];
+    const hasAnchorKeyword = anchorKeywords.some(kw => trimmed.includes(kw));
+    if (hasAnchorKeyword) {
+      return; // 跳过 think 块锚定行
+    }
+  }
+
   const englishWords = text.match(/\b[a-zA-Z]+\b/g) || [];
   
   // 过滤白名单术语
@@ -775,7 +785,7 @@ function handleRequest(request) {
         },
         serverInfo: {
           name: 'zhongwen-language-checker',
-          version: '4.6.0',
+          version: '4.7.0',
         },
       });
       break;
