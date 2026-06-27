@@ -141,7 +141,7 @@ function doRollback(targetVersion) {
   };
 }
 
-function doUpgrade() {
+function doUpgrade(autoMode = false) {
   const manifest = readManifest();
   const currentVersion = manifest.current_version || 'unknown';
 
@@ -177,6 +177,51 @@ function doUpgrade() {
     newVersion = tags.pop() || 'unknown';
   } catch (e) { /* ignore */ }
 
+  // 自动同步版本化配置（opencode.json / opencode.jsonc）
+  let configUpdated = false;
+  try {
+    const agentSource = join(PLUGIN_DIR, 'zhongwen-agent.md');
+    const agentContent = readFileSync(agentSource, 'utf8');
+    const versionMatch = agentContent.match(/version:\s*"([^"]+)"/);
+    const detectedVersion = versionMatch ? versionMatch[1] : newVersion;
+    
+    const agentName = `zhongwen-agent-${detectedVersion}`;
+    const mcpName = `zhongwen-language-checker-${detectedVersion}`;
+    const mcpTarget = join(CONFIG_DIR, 'mcp', 'check_language.mjs');
+    
+    // 更新 opencode.json 或 opencode.jsonc
+    const configPathJson = join(CONFIG_DIR, 'opencode.json');
+    const configPathJsonc = join(CONFIG_DIR, 'opencode.jsonc');
+    const actualConfigPath = existsSync(configPathJsonc) ? configPathJsonc : (existsSync(configPathJson) ? configPathJson : null);
+    
+    if (actualConfigPath) {
+      const config = JSON.parse(readFileSync(actualConfigPath, 'utf8'));
+      
+      // 移除旧版本 MCP 配置
+      const oldMcps = Object.keys(config.mcp || {}).filter(k => 
+        k.startsWith('zhongwen-language-checker') || k.startsWith('zhongwen-version-manager')
+      );
+      oldMcps.forEach(k => delete config.mcp[k]);
+      
+      // 添加新版本 MCP 配置
+      config.mcp[mcpName] = {
+        type: 'local',
+        command: ['node', mcpTarget],
+        enabled: true,
+        version: detectedVersion
+      };
+      
+      // 更新 agent 名称
+      config.default_agent = agentName;
+      
+      // 保存
+      writeFileSync(actualConfigPath, JSON.stringify(config, null, 2), 'utf8');
+      configUpdated = true;
+    }
+  } catch (e) {
+    logMessage(`自动配置同步失败: ${e.message}`);
+  }
+
   // 创建新状态快照
   const newSnapshotVersion = `${newVersion}-installed`;
   createSnapshot(newSnapshotVersion);
@@ -193,6 +238,7 @@ function doUpgrade() {
     previous_version: currentVersion,
     new_version: newVersion,
     files_updated: installedCount,
+    config_updated: configUpdated,
     backup_created: backupVersion
   };
 }
@@ -374,7 +420,8 @@ function handleRequest(request) {
         }
 
         case 'zhongwen_upgrade': {
-          const result = doUpgrade();
+          const autoMode = args.auto === true;
+          const result = doUpgrade(autoMode);
 
           sendResponse(id, {
             content: [{
