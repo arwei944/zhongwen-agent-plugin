@@ -28,8 +28,7 @@
     "zhongwen-language-checker-v4.0.0": {
       "type": "local",
       "command": ["node", "C:\\Users\\Administrator\\.config\\opencode\\mcp\\check_language.mjs"],
-      "enabled": true,
-      "version": "4.0.0"
+      "enabled": true
     }
   },
   "instructions": ["chinese-rules.md"],

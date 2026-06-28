@@ -113,7 +113,6 @@ if (-not $configPath) {
         type = "local"
         command = @("node", $mcpTarget)
         enabled = $true
-        version = $version
     } | ConvertTo-Json
     $config.mcp | Add-Member -NotePropertyName $mcpName -NotePropertyValue ($mcpConfig | ConvertFrom-Json) -Force
     

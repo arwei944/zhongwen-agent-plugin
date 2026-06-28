@@ -432,7 +432,7 @@ function doUpgrade(autoMode = false) {
         type: 'local',
         command: ['node', mcpTarget],
         enabled: true,
-        version: detectedVersion
+        // version field is not supported by opencode MCP config schema
       };
       
       // 更新 agent 名称
