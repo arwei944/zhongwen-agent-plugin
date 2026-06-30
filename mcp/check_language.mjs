@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * zhongwen-agent · MCP 语言检查服务器 v4.9.0
+ * zhongwen-agent · MCP 语言检查服务器 v5.0.0
  * 
  * 工程级零信任语言门卫系统。AI 无法绕过、无法控制、无法关闭。
  * 提供实时双向语言纯度检查、自动修复引擎、会话级状态机、自进化引擎。
+ * v5.0.0：本地自进化迭代，不再依赖外部仓库。
  * 
  * 协议：JSON-RPC 2.0 over stdio
  */
@@ -23,6 +24,9 @@ const WHITELIST_PATH = join(CONFIG_DIR, 'whitelist.json');
 const VERSIONS_DIR = join(CONFIG_DIR, 'versions');
 const MANIFEST_PATH = join(VERSIONS_DIR, 'manifest.json');
 const PLUGIN_DIR = 'D:\\work\\opencode\\zhongwen-agent-plugin';
+
+// 升级工具配置
+const GITHUB_REPO = 'https://github.com/arwei944/zhongwen-agent-plugin.git';
 
 const MANAGED_FILES = [
   { source: join(PLUGIN_DIR, 'zhongwen-agent.md'), relPath: 'agents/zhongwen-agent.md' },
@@ -365,23 +369,61 @@ function doRollback(targetVersion) {
   };
 }
 
-function doUpgrade(autoMode = false) {
+// v5.0.0 进化日志文件路径
+const EVOLUTION_LOG_PATH = join(VERSIONS_DIR, 'evolution-log.json');
+
+function readEvolutionLog() {
+  try {
+    if (existsSync(EVOLUTION_LOG_PATH)) {
+      return JSON.parse(readFileSync(EVOLUTION_LOG_PATH, 'utf8'));
+    }
+  } catch (e) { /* 忽略 */ }
+  return { entries: [] };
+}
+
+function writeEvolutionLog(log) {
+  try {
+    if (!existsSync(VERSIONS_DIR)) mkdirSync(VERSIONS_DIR, { recursive: true });
+    writeFileSync(EVOLUTION_LOG_PATH, JSON.stringify(log, null, 2), 'utf8');
+  } catch (e) { /* 忽略 */ }
+}
+
+/**
+ * 解析版本号，递增到下一个版本
+ * v4.9.0 -> v5.0.0, v5.0.0 -> v5.1.0
+ */
+function incrementVersion(versionStr) {
+  const match = versionStr.match(/v?(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return `v${new Date().getTime()}`;
+  let [, major, minor, patch] = match.map(v => parseInt(v));
+  // 当违规≥5次时升级大版本，否则升小版本
+  if (sessionState.violations >= 5) {
+    major += 1;
+    minor = 0;
+    patch = 0;
+  } else {
+    minor += 1;
+    patch = 0;
+  }
+  return `v${major}.${minor}.${patch}`;
+}
+
+/**
+ * 本地自进化迭代（无需 GitHub）
+ * 创建新版本快照，递增版本号，记录进化日志
+ */
+function doLocalEvolve(reason) {
   const manifest = readManifest();
-  const currentVersion = manifest.current_version || 'unknown';
+  const currentVersion = manifest.current_version || '0.0.0';
+
+  // 生成新版本号
+  const newVersion = incrementVersion(currentVersion);
 
   // 创建备份
-  const backupVersion = `pre-upgrade-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  const backupVersion = `pre-evolve-${newVersion}`;
   createSnapshot(backupVersion);
 
-  // Git 拉取
-  try {
-    execSync('git pull origin master', { cwd: PLUGIN_DIR, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
-    execSync('git fetch --tags', { cwd: PLUGIN_DIR, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
-  } catch (e) {
-    return { success: false, error: `Git 操作失败: ${e.message}` };
-  }
-
-  // 安装更新后的文件
+  // 安装文件（从插件源复制到配置目录）
   let installedCount = 0;
   for (const file of MANAGED_FILES) {
     const targetPath = join(CONFIG_DIR, file.relPath);
@@ -393,15 +435,7 @@ function doUpgrade(autoMode = false) {
     }
   }
 
-  // 获取最新版本号
-  let newVersion = 'unknown';
-  try {
-    const tags = execSync('git tag -l', { cwd: PLUGIN_DIR, encoding: 'utf8' })
-      .trim().split('\n').filter(t => t);
-    newVersion = tags.pop() || 'unknown';
-  } catch (e) { /* ignore */ }
-
-  // 自动同步版本化配置（opencode.json / opencode.jsonc）
+  // 自动同步配置
   let configUpdated = false;
   try {
     const agentSource = join(PLUGIN_DIR, 'zhongwen-agent.md');
@@ -413,7 +447,6 @@ function doUpgrade(autoMode = false) {
     const mcpName = `zhongwen-language-checker-${detectedVersion}`;
     const mcpTarget = join(CONFIG_DIR, 'mcp', 'check_language.mjs');
     
-    // 更新 opencode.json 或 opencode.jsonc
     const configPathJson = join(CONFIG_DIR, 'opencode.json');
     const configPathJsonc = join(CONFIG_DIR, 'opencode.jsonc');
     const actualConfigPath = existsSync(configPathJsonc) ? configPathJsonc : (existsSync(configPathJson) ? configPathJson : null);
@@ -421,24 +454,19 @@ function doUpgrade(autoMode = false) {
     if (actualConfigPath) {
       const config = JSON.parse(readFileSync(actualConfigPath, 'utf8'));
       
-      // 移除旧版本 MCP 配置
       const oldMcps = Object.keys(config.mcp || {}).filter(k => 
         k.startsWith('zhongwen-language-checker') || k.startsWith('zhongwen-version-manager')
       );
       oldMcps.forEach(k => delete config.mcp[k]);
       
-      // 添加新版本 MCP 配置
       config.mcp[mcpName] = {
         type: 'local',
         command: ['node', mcpTarget],
         enabled: true,
-        // version field is not supported by opencode MCP config schema
       };
       
-      // 更新 agent 名称
       config.default_agent = agentName;
       
-      // 保存
       writeFileSync(actualConfigPath, JSON.stringify(config, null, 2), 'utf8');
       configUpdated = true;
     }
@@ -446,16 +474,38 @@ function doUpgrade(autoMode = false) {
     logMessage(`自动配置同步失败: ${e.message}`);
   }
 
-  // 创建新状态快照
-  const newSnapshotVersion = `${newVersion}-installed`;
+  // 创建新版本快照
+  const newSnapshotVersion = `${newVersion}-evolved`;
   createSnapshot(newSnapshotVersion);
 
   // 更新 manifest
   manifest.current_version = newVersion;
   manifest.last_updated = new Date().toISOString();
+  if (!manifest.versions) manifest.versions = [];
+  manifest.versions.push({
+    version: newSnapshotVersion,
+    timestamp: new Date().toISOString(),
+    type: 'evolution',
+    reason: reason || '自动进化',
+    previous: currentVersion
+  });
   writeManifest(manifest);
 
-  logMessage(`升级完成: ${currentVersion} -> ${newVersion}`);
+  // 记录进化日志
+  const evolutionLog = readEvolutionLog();
+  evolutionLog.entries.push({
+    timestamp: new Date().toISOString(),
+    from: currentVersion,
+    to: newVersion,
+    reason: reason || '自动进化（重度违规触发）',
+    violations: sessionState.violations,
+    session_checks: sessionState.checks,
+    config_updated: configUpdated,
+    files_installed: installedCount,
+  });
+  writeEvolutionLog(evolutionLog);
+
+  logMessage(`自进化完成: ${currentVersion} -> ${newVersion} (原因: ${reason || '自动'})`);
 
   return {
     success: true,
@@ -463,8 +513,15 @@ function doUpgrade(autoMode = false) {
     new_version: newVersion,
     files_updated: installedCount,
     config_updated: configUpdated,
-    backup_created: backupVersion
+    backup_created: backupVersion,
+    evolution_reason: reason || '自动进化',
   };
+}
+
+// 保留旧 doUpgrade 的引用，实际使用 doLocalEvolve
+function doUpgrade(autoMode = false) {
+  // v5.0.0: 改用本地自进化替代 Git 拉取
+  return doLocalEvolve(autoMode ? '自动升级（原 Git 模式已切换为本地迭代）' : '手动触发升级');
 }
 
 // ============================================================
@@ -966,7 +1023,7 @@ function handleRequest(request) {
         },
         serverInfo: {
           name: 'zhongwen-language-checker',
-          version: '4.9.0',
+          version: '5.0.0',
         },
       });
       break;
@@ -1056,7 +1113,35 @@ function handleRequest(request) {
             description: '查看所有版本快照的历史记录。',
             inputSchema: { type: 'object', properties: {} }
           },
-        ],
+          {
+            name: 'zhongwen_evolve',
+            description: '手动触发自进化引擎。创建新版本快照并递增版本号。',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                reason: { type: 'string', description: '进化原因（可选）' }
+              }
+            }
+          },
+          {
+            name: 'zhongwen_evolution_log',
+            description: '查看自进化引擎的完整历史记录。',
+            inputSchema: { type: 'object', properties: {} }
+          },
+          {
+            name: 'begin_chinese_thinking',
+            description: `【事前门卫·不可跳过】你在开始任何推理之前，必须先调用此工具。\n\n这是你的思维语言锚定工具。在写任何推理内容之前，你必须调用此工具并传入你的中文思维锚定语句。\n\n工具会验证你的思维锚定语句是否包含中文。如果通过，你可以开始用中文推理。如果失败，你必须修正锚定语句后重新调用。\n\n参数说明：\n- affirmation：你的思维语言声明，必须包含"中文思维已激活"字样和中文字符。\n\n注意：不调用此工具直接开始推理属于严重违规。此工具是思考的前置条件，不是事后检查。`,
+            inputSchema: {
+              type: 'object',
+              properties: {
+                affirmation: {
+                  type: 'string',
+                  description: '你的思维语言锚定声明。必须包含"中文思维已激活"字样和中文字符。示例："【中文思维已激活】本段思考将严格使用中文进行推理。"'
+                }
+              },
+              required: ['affirmation']
+            }
+          },
       });
       break;
 
@@ -1296,6 +1381,80 @@ function handleRequest(request) {
             }, null, 2)
           }]
         });
+      } else if (toolName === 'zhongwen_evolve') {
+        const reason = args.reason || '手动触发自进化';
+        logMessage(`手动触发自进化: ${reason}`);
+        const result = doLocalEvolve(reason);
+        sendResponse(id, {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        });
+      } else if (toolName === 'zhongwen_evolution_log') {
+        const log = readEvolutionLog();
+        sendResponse(id, {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(log, null, 2)
+          }]
+        });
+      } else if (toolName === 'begin_chinese_thinking') {
+        const affirmation = args.affirmation || '';
+        
+        // 验证：必须包含中文字符
+        const hasChinese = [...affirmation].some(ch => {
+          const code = ch.codePointAt(0);
+          return (code >= 0x4E00 && code <= 0x9FFF) ||
+                 (code >= 0x3400 && code <= 0x4DBF) ||
+                 (code >= 0xF900 && code <= 0xFAFF);
+        });
+        
+        // 验证：必须包含"中文思维已激活"字样
+        const hasKeyword = affirmation.includes('中文思维已激活');
+        
+        if (!hasChinese) {
+          sendResponse(id, {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                status: 'FAIL',
+                reason: '锚定语句中未检测到中文字符。你的思维语言必须是中文。请使用包含"中文思维已激活"字样的中文声明。',
+                gate: 'BLOCKED',
+                affirmation: affirmation.substring(0, 100),
+              }, null, 2)
+            }]
+          });
+          break;
+        }
+        
+        if (!hasKeyword) {
+          sendResponse(id, {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                status: 'FAIL',
+                reason: '锚定语句中必须包含"中文思维已激活"字样。这是你的思维语言锚定，不可省略。',
+                gate: 'BLOCKED',
+                affirmation: affirmation.substring(0, 100),
+              }, null, 2)
+            }]
+          });
+          break;
+        }
+        
+        // 通过验证
+        sendResponse(id, {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              status: 'PASS',
+              gate: 'OPEN',
+              message: '中文思维锚定已确认。你可以开始用中文推理了。',
+              affirmation: affirmation.substring(0, 100),
+            }, null, 2)
+          }]
+        });
       } else {
         sendResponse(id, null, {
           code: -32601,
@@ -1331,16 +1490,25 @@ rl.on('line', (line) => {
 // ============================================================
 
 /**
- * 触发自进化：直接调用内置升级函数
+ * 触发自进化：v5.0.0 使用本地迭代模式，不依赖 GitHub
+ * 创建新版本快照，递增版本号，记录进化日志
  */
 function triggerSelfEvolution() {
   try {
     // 异步执行升级，不阻塞主流程
     setTimeout(() => {
       try {
-        const result = doUpgrade(true);
-        console.error('[zhongwen-mcp] 自进化引擎已触发：检测到重度违规，正在自动升级...');
-        console.error('[zhongwen-mcp] 升级结果:', JSON.stringify(result));
+        const violations = sessionState.violations;
+        const reason = `【自进化触发】累计违规 ${violations} 次，触发自动迭代`;
+        console.error(`[zhongwen-mcp] 自进化引擎已触发：${reason}`);
+        
+        const result = doLocalEvolve(reason);
+        console.error('[zhongwen-mcp] 自进化完成:', JSON.stringify({
+          from: result.previous_version,
+          to: result.new_version,
+          files: result.files_updated,
+          config: result.config_updated,
+        }));
       } catch (e) {
         console.error('[zhongwen-mcp] 自进化引擎异常:', e.message);
       }

@@ -25,12 +25,12 @@
   "model": "stepfun/step-3.7-flash",
   "small_model": "stepfun/step-3.7-flash",
   "mcp": {
-    "zhongwen-language-checker-v4.0.0": {
+    "zhongwen-language-checker-v5.0.0": {
       "type": "local",
       "command": ["node", "C:\\Users\\Administrator\\.config\\opencode\\mcp\\check_language.mjs"],
       "enabled": true
     }
   },
   "instructions": ["chinese-rules.md"],
-  "default_agent": "zhongwen-agent-v4.0.0"
+  "default_agent": "zhongwen-agent-v5.0.0"
 }
